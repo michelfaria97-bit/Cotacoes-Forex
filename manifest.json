@@ -1,0 +1,21 @@
+{
+  "name": "Forex ao Vivo",
+  "short_name": "ForexLive",
+  "description": "Cotações Forex em tempo real",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#000000",
+  "theme_color": "#00D4A8",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/2919/2919600.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/2919/2919600.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
