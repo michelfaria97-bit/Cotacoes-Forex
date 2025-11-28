@@ -1,1 +1,1 @@
-# Cotações-Forex
+# Cotacoes-Forex
