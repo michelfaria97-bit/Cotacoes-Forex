@@ -87,114 +87,104 @@ def fetch_forex():
         futures = [ex.submit(get_pair, s) for s in assets['Forex']]
         return [f.result() for f in as_completed(futures)]
 
-# ===================== FUTUROS (SEM .style → nunca dá KeyError) =====================
+# ===================== FUTUROS CORRETOS (EUA na tabela certa) =====================
 @st.cache_data(ttl=55)
 def fetch_futures():
-    url = "https://br.investing.com/indices/indices-futures"
     headers = {"User-Agent": "Mozilla/5.0"}
-    
-    # Mapeamento exato → símbolo desejado (só o contrato principal)
-    mapa = {
-        "Dow Jones": "US30",
-        "S&P 500": "SPX500",
-        "Nasdaq 100": "NAS100",        # pega o primeiro que aparecer
-        "Russell 2000": "RUS2000",
-        "Shanghai": "CHINA50",
-        "Nikkei 225": "JPN225",
-        "Hang Seng": "HK50",
-        "Nifty 50": "IND50",
-        "S&P/ASX 200": "AUS200",
-        "Euro Stoxx 50": "EU50",
-        "DAX": "GER40",
-        "FTSE 100": "UK100",
-        "CAC 40": "FRA40",
-        "IBEX 35": "ESP35",
-        "FTSE MIB": "ITA40"
-    }
-    
-    # Para evitar duplicatas
-    já_exibido = set()
     dados = {"EUA": [], "Ásia-Pacífico": [], "Europa": []}
-    
+    já_exibido = set()
+
+    # === TABELA DOS EUA (atraso 10 min) ===
+    url_eua = "https://br.investing.com/indices/indices-futures"
     try:
-        soup = BeautifulSoup(requests.get(url, headers=headers, timeout=15).text, "html.parser")
-        for row in soup.find_all("tr", class_=re.compile("row")):
+        soup = BeautifulSoup(requests.get(url_eua, headers=headers, timeout=15).text, "html.parser")
+        for row in soup.select("table.datatable-v2_table__93S4Y tbody tr"):
             tds = row.find_all("td")
             if len(tds) < 8: continue
-            
-            a_tag = row.find("a")
-            if not a_tag: continue
-            nome_completo = a_tag.get_text(strip=True)
-            
-            # Procura qual índice está no nome
-            simbolo = None
-            for chave, sigla in mapa.items():
-                if chave.lower() in nome_completo.lower():
-                    simbolo = sigla
-                    break
-            
-            if not simbolo or simbolo in já_exibido:
-                continue
-                
-            # === PEGA SÓ O PRIMEIRO (contrato front month) ===
+            nome = row.find("a")
+            if not nome: continue
+            nome = nome.get_text(strip=True)
+
+            mapa_eua = {
+                "Dow Jones": "US30", "S&P 500": "SPX500", "Nasdaq 100": "NAS100", "Russell 2000": "RUS2000"
+            }
+            simbolo = next((v for k,v in mapa_eua.items() if k in nome), None)
+            if not simbolo or simbolo in já_exibido: continue
             já_exibido.add(simbolo)
-            
+
             ultimo = tds[3].get_text(strip=True)
-            var_txt = tds[7].get_text(strip=True).replace("%", "").replace("(", "-").replace(")", "")
-            try:
-                var = round(float(var_txt.replace(",", ".")), 2)
-            except:
-                var = 0.0
-                
-            item = (simbolo, ultimo, var)
-            
-            if simbolo in ["US30", "SPX500", "NAS100", "RUS2000"]:
-                dados["EUA"].append(item)
-            elif simbolo in ["CHINA50", "JPN225", "HK50", "IND50", "AUS200"]:
-                dados["Ásia-Pacífico"].append(item)
+            var = tds[7].get_text(strip=True).replace("%","").replace("(","").replace(")","").strip()
+            try: var = round(float(var.replace(",", ".")), 2)
+            except: var = 0.0
+
+            dados["EUA"].append((simbolo, ultimo, var))
+    except: pass
+
+    # === TABELA GLOBAL (Ásia e Europa) ===
+    try:
+        soup = BeautifulSoup(requests.get(url_eua, headers=headers, timeout=15).text, "html.parser")
+        for row in soup.select("table.datatable-v2_table__93S4Y + table tbody tr"):
+            tds = row.find_all("td")
+            if len(tds) < 8: continue
+            nome_tag = row.find("a")
+            if not nome_tag: continue
+            nome = nome_tag.get_text(strip=True)
+
+            mapa_global = {
+                "Nikkei 225": "JPN225", "Hang Seng": "HK50", "Shanghai": "CHINA50",
+                "ASX 200": "AUS200", "Nifty 50": "IND50", "DAX": "GER40",
+                "FTSE 100": "UK100", "CAC 40": "FRA40", "Euro Stoxx 50": "EU50",
+                "IBEX 35": "ESP35", "FTSE MIB": "ITA40"
+            }
+            simbolo = next((v for k,v in mapa_global.items() if k.lower() in nome.lower()), None)
+            if not simbolo or simbolo in já_exibido: continue
+            já_exibido.add(simbolo)
+
+            ultimo = tds[3].get_text(strip=True)
+            var_txt = tds[7].get_text(strip=True).replace("%","").replace("(","").replace(")","").strip()
+            try: var = round(float(var_txt.replace(",", ".")), 2)
+            except: var = 0.0
+
+            if simbolo in ["JPN225","HK50","CHINA50","AUS200","IND50"]:
+                dados["Ásia-Pacífico"].append((simbolo, ultimo, var))
             else:
-                dados["Europa"].append(item)
-                
-    except Exception as e:
-        pass
-        
+                dados["Europa"].append((simbolo, ultimo, var))
+    except: pass
+
     return dados
-    
+
 # ===================== LOOP PRINCIPAL =====================
 placeholder = st.empty()
-
 while True:
     start = time.time()
     with placeholder.container():
         forex = fetch_forex()
         futuros = fetch_futures()
 
-        st.markdown(f'<p class="time">Atualizado: {datetime.now():%d/%m/%Y %H:%M:%S} • Tempo de carga: {time.time()-start:.1f}s</p>', 
+        st.markdown(f'<p class="time">Atualizado: {datetime.now():%d/%m/%Y %H:%M:%S} • Tempo: {time.time()-start:.1f}s</p>', 
                     unsafe_allow_html=True)
 
-        # ===================== FUTUROS (HTML PURO) =====================
+        # === FUTUROS ===
         st.markdown("### Futuros de Índices Globais")
         c1, c2, c3 = st.columns(3)
-        regioes = ["EUA", "Ásia-Pacífico", "Europa"]
-
-        for col, regiao in zip([c1, c2, c3], regioes):
+        for col, regiao in zip([c1,c2,c3], ["EUA", "Ásia-Pacífico", "Europa"]):
             with col:
                 st.markdown(f"**{regiao}**")
                 lista = futuros.get(regiao, [])
                 if not lista:
                     st.info("Sem dados")
                     continue
-                html = "<table><tr style='background:#111;color:white;'><th>Símbolo</th><th>Último</th><th>Var %</th></tr>"
+                html = "<table><tr><th>Símbolo</th><th>Último</th><th>Var %</th></tr>"
                 for simb, ult, var in lista:
-                    cor = "#00ff88" if var > 0 else "#ff4444" if var < 0 else "white"
-                    html += f"<tr><td>{simb}</td><td>{ult}</td><td style='color:{cor};font-weight:bold'>{var:+.2f}%</td></tr>"
+                    cor = "green" if var > 0 else "red" if var < 0 else ""
+                    html += f"<tr><td>{simb}</td><td>{ult}</td><td class='{cor}'>{var:+.2f}%</td></tr>"
                 html += "</table>"
                 st.markdown(html, unsafe_allow_html=True)
 
         st.markdown("---")
 
-        # ===================== FOREX (com .style) =====================
-        st.markdown("### Pares Forex ao Vivo")
+        # === FOREX ===
+        st.markdown("### Pares Forex")
         grupos = {}
         for item in forex:
             base = item["Symbol"].split("/")[0]
@@ -202,51 +192,30 @@ while True:
 
         cols = st.columns(4)
         for i, (moeda, lista) in enumerate(sorted(grupos.items())):
-            with cols[i % 4]:
+            with cols[i%4]:
                 st.subheader(moeda)
                 df = pd.DataFrame(lista).set_index("Symbol")[["Price", "Change"]]
-                def cor(v):
-                    try:
-                        return "color:#00ff88;font-weight:bold" if float(v)>0 else "color:#ff4444;font-weight:bold"
-                    except:
-                        return ""
+                def cor(v): 
+                    try: return "color:#00ff88;font-weight:bold" if float(v)>0 else "color:#ff4444;font-weight:bold"
+                    except: return ""
                 styled = df.style.applymap(cor, subset=["Change"]).format({"Change": "{:+.2f}%"})
                 st.dataframe(styled, use_container_width=True)
 
-        # ===================== GRÁFICO FORÇA RELATIVA =====================
+        # === GRÁFICO FORÇA ===
         st.markdown("### Força Relativa das Moedas (24h)")
-        df_graf = pd.DataFrame(forex)
-        df_graf["Moeda"] = df_graf["Symbol"].str.split("/").str[0]
-        media = df_graf.groupby("Moeda")["Change"].mean().round(2).sort_values(ascending=False)
-
-        fig = px.bar(
-            media.reset_index(), 
-            x="Moeda", 
-            y="Change",
-            color="Change",
-            color_continuous_scale=["#ff4444", "#ff8800", "#ffff00", "#88ff88", "#00ff88"],
-            text="Change",
-            height=500
-        )
+        dfg = pd.DataFrame(forex)
+        dfg["Moeda"] = dfg["Symbol"].str.split("/").str[0]
+        media = dfg.groupby("Moeda")["Change"].mean().round(2).sort_values(ascending=False)
+        fig = px.bar(media.reset_index(), x="Moeda", y="Change", color="Change",
+                     color_continuous_scale=["#ff4444","#ff8800","#ffff00","#88ff88","#00ff88"],
+                     text="Change", height=500)
         fig.update_traces(texttemplate="%{text:+.2f}%", textposition="outside")
         fig.add_hline(y=0, line_color="gray", line_width=2)
-        fig.update_layout(
-            showlegend=False,
-            plot_bgcolor="rgba(0,0,0,0)",
-            paper_bgcolor="rgba(0,0,0,0)",
-            font_color="white"
-        )
+        fig.update_layout(showlegend=False, plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", font_color="white")
         st.plotly_chart(fig, use_container_width=True)
 
-        # ===================== DOWNLOAD CSV =====================
-        csv_data = pd.DataFrame(forex).to_csv(index=False, encoding="utf-8-sig")
-        st.download_button(
-            label="Baixar todos os pares Forex (CSV)",
-            data=csv_data,
-            file_name=f"forex_{datetime.now():%Y%m%d_%H%M}.csv",
-            mime="text/csv"
-        )
+        # === DOWNLOAD ===
+        csv = pd.DataFrame(forex).to_csv(index=False, encoding="utf-8-sig")
+        st.download_button("Baixar Forex (CSV)", csv, f"forex_{datetime.now():%Y%m%d_%H%M}.csv", "text/csv")
 
     time.sleep(60)
-
-
