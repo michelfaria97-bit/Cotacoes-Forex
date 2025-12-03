@@ -58,7 +58,7 @@ assets = {
     }
 }
 
-# Mapeamento do nome completo para o símbolo curto desejado (para a coluna "Símbolo")
+# Mapeamento do nome completo do índice para o símbolo curto desejado
 FUTURES_MAP = {
     # EUA
     'Dow Jones': 'US30F',
@@ -66,7 +66,7 @@ FUTURES_MAP = {
     'Nasdaq 100': 'NDQF',
     'Russell 2000': 'RTYF',
     # Ásia-Pacífico
-    'Shanghai SE': 'CSI300F', # Usando Shanghai SE como proxy/referência para China
+    'Shanghai SE': 'SCIF', 
     'Nikkei': 'NK225F',
     'Hang Seng Index': 'HSF',
     'Nifty 50': 'NIFTYF',
@@ -79,86 +79,8 @@ FUTURES_MAP = {
     'FTSE MIB': 'MIBF',
 }
 
-# ==================== FUNÇÃO DE RASPAGEM FUTUROS ====================
-@st.cache_data(ttl=55)
-def fetch_futures_data():
-    """
-    Raspa dados de futuros de https://br.investing.com/indices/indices-futures
-    e retorna os dados em um dicionário agrupado.
-    """
-    url = 'https://br.investing.com/indices/indices-futures'
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-    results = {'EUA': [], 'Ásia-Pacífico': [], 'Europa': []}
-
-    try:
-        r = requests.get(url, headers=headers, timeout=15)
-        r.raise_for_status() # Lança exceção para códigos de erro (4xx ou 5xx)
-        soup = BeautifulSoup(r.text, 'html.parser')
-
-        # O Investing.com agrupa as tabelas por continente (ou por região na mesma página)
-        # Vamos tentar encontrar todas as linhas de dados da tabela principal
-        rows = soup.find_all('tr', class_=re.compile(r'datatable-v2_row__hkEus dynamic-table-v2_row__ILVMx'))
-
-        for row in rows:
-            try:
-                # Extrai o nome do índice
-                name_tag = row.find('a', class_='overflow-hidden')
-                if not name_tag: continue
-                
-                # O nome do índice é o texto dentro do <h4>
-                name_full = name_tag.find('span', dir='ltr').text.strip()
-                
-                # Usa o mapeamento para obter o Símbolo curto desejado (ex: Dow Jones -> US30F)
-                symbol = FUTURES_MAP.get(name_full, None)
-                if not symbol: continue # Ignora se não for um dos índices que queremos
-
-                # Extrai as células (td) relevantes. A estrutura é:
-                # [0] (checkbox)
-                # [1] Nome
-                # [2] Mês
-                # [3] Último
-                # [4] Máxima
-                # [5] Mínima
-                # [6] Variação
-                # [7] Var. %
-                # [8] Hora
-                cells = row.find_all('td')
-                
-                # Último (célula 3)
-                last_price_tag = cells[3].find('span') or cells[3]
-                last_price = last_price_tag.text.strip()
-                
-                # Var. % (célula 7)
-                change_pct_text = cells[7].text.strip().replace(',', '.').replace('%', '')
-                change_pct = float(change_pct_text) if change_pct_text else 0.0
-
-                item = {
-                    'Símbolo': symbol,
-                    'Último': last_price,
-                    'Var. 1D (%)': change_pct
-                }
-                
-                # Classifica o resultado na região correta
-                if symbol in ['US30F', 'ESF', 'NDQF', 'RTYF']:
-                    results['EUA'].append(item)
-                elif symbol in ['CSI300F', 'NK225F', 'HSF', 'NIFTYF', 'ASX200F']:
-                    results['Ásia-Pacífico'].append(item)
-                elif symbol in ['STX600F', 'DAXF', 'FTSEF', 'CAC40F', 'MIBF']:
-                    results['Europa'].append(item)
-                    
-            except Exception as e:
-                 # print(f"Erro ao processar linha de futuro: {e}") 
-                 continue # Pula a linha com erro e continua
-
-    except requests.exceptions.RequestException as e:
-        # print(f"Erro ao acessar a URL de futuros: {e}")
-        pass # Retorna o dicionário vazio se houver erro de requisição
-        
-    return results
-
-# ==================== FUNÇÃO TURBO CORRIGIDA (100% FUNCIONA) — MANTIDA ====================
+# ==================== FUNÇÃO TURBO CORRIGIDA (FOREX) ====================
 def get_single_pair(symbol, name):
-    # ... (sua função get_single_pair permanece inalterada) ...
     url = f'https://br.investing.com/currencies/{symbol}-historical-data'
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
     try:
@@ -206,9 +128,7 @@ def get_single_pair(symbol, name):
         }
 
     except Exception as e:
-        # print(f"Erro em {symbol}: {e}")  # Descomente para debug
         return {'Symbol': symbol.upper().replace('-','/'), 'Name': name, 'Last Price': 'Erro', '1d Change (%)': 0.0}
-
 
 @st.cache_data(ttl=55)
 def fetch_all_turbo():
@@ -219,9 +139,74 @@ def fetch_all_turbo():
             results.append(future.result())
     return results
 
-# ==================== AGRUPAMENTO — MANTIDA ====================
+# ==================== FUNÇÃO DE RASPAGEM FUTUROS (NOVA) ====================
+@st.cache_data(ttl=55)
+def fetch_futures_data():
+    """
+    Raspa dados de futuros de https://br.investing.com/indices/indices-futures
+    e retorna os dados em um dicionário agrupado.
+    """
+    url = 'https://br.investing.com/indices/indices-futures'
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+    results = {'EUA': [], 'Ásia-Pacífico': [], 'Europa': []}
+
+    try:
+        r = requests.get(url, headers=headers, timeout=15)
+        r.raise_for_status() 
+        soup = BeautifulSoup(r.text, 'html.parser')
+
+        # Busca linhas de dados nas tabelas
+        rows = soup.find_all('tr', class_=re.compile(r'datatable-v2_row__hkEus dynamic-table-v2_row__ILVMx'))
+
+        for row in rows:
+            try:
+                name_tag = row.find('a', class_='overflow-hidden')
+                if not name_tag: continue
+                
+                name_full = name_tag.find('span', dir='ltr').text.strip()
+                symbol = FUTURES_MAP.get(name_full, None)
+                if not symbol: continue 
+
+                cells = row.find_all('td')
+                
+                # Último (célula 3)
+                last_price_tag = cells[3].find('span') or cells[3]
+                last_price = last_price_tag.text.strip()
+                
+                # Var. % (célula 7)
+                change_pct_text = cells[7].text.strip().replace(',', '.').replace('%', '').replace('(', '').replace(')', '')
+                
+                # TENTA CONVERTER PARA FLOAT, SENÃO USA 0.0
+                try:
+                    change_pct = float(change_pct_text)
+                except ValueError:
+                    change_pct = 0.0
+
+                item = {
+                    'Símbolo': symbol,
+                    'Último': last_price,
+                    'Var. 1D (%)': change_pct
+                }
+                
+                # Classificação do índice na região correta
+                if symbol in ['US30F', 'ESF', 'NDQF', 'RTYF']:
+                    results['EUA'].append(item)
+                elif symbol in ['SCIF', 'NK225F', 'HSF', 'NIFTYF', 'ASX200F']:
+                    results['Ásia-Pacífico'].append(item)
+                elif symbol in ['STX600F', 'DAXF', 'FTSEF', 'CAC40F', 'MIBF']:
+                    results['Europa'].append(item)
+                    
+            except Exception:
+                 continue
+
+    except requests.exceptions.RequestException:
+        pass
+        
+    return results
+
+
+# ==================== AGRUPAMENTO (FOREX) ====================
 def agrupar_por_base(data):
-    # ... (sua função agrupar_por_base permanece inalterada) ...
     grupos = {
         'Dólar Americano': [], 'Euro': [], 'Libra Esterlina': [], 'Iene Japonês': [],
         'Dólar Australiano': [], 'Dólar Neozelandês': [], 'Dólar Canadense': [], 'Franco Suíço': [],
@@ -241,9 +226,8 @@ def agrupar_por_base(data):
         elif name.startswith('Chinese Yuan'): grupos['Yuan Chinês'].append(item)
     return {k: v for k, v in grupos.items() if v}
 
-# ==================== GRÁFICO — MANTIDA ====================
+# ==================== GRÁFICO (FOREX) ====================
 def grafico_forca(data):
-    # ... (sua função grafico_forca permanece inalterada) ...
     df = pd.DataFrame(data)
     df['Base'] = df['Symbol'].str.split('/').str[0]
     media = df.groupby('Base')['1d Change (%)'].mean().round(2).sort_values(ascending=False)
@@ -259,19 +243,25 @@ def grafico_forca(data):
 
 # Função de estilo para as células de variação
 def cor(val):
+    # Garante que val é um float antes da comparação para evitar KeyErrors no pandas
+    try:
+        val = float(val) 
+    except (ValueError, TypeError):
+        val = 0.0
+        
     color = 'red' if val < 0 else 'green' if val > 0 else 'gray'
     return f'color: {color}; font-weight: bold'
 
-# ==================== LOOP PRINCIPAL — ADICIONANDO FUTUROS ====================
+# ==================== LOOP PRINCIPAL — VERSÃO 100% ESTÁVEL ====================
 placeholder = st.empty()
 
 while True:
     start_time = time.time()
     with placeholder.container():
-        # 1. Busca dados de Forex (em paralelo)
+        # 1. Busca dados de Forex
         dados = fetch_all_turbo() 
         
-        # 2. Busca dados de Futuros (cacheada e síncrona)
+        # 2. Busca dados de Futuros
         futuros = fetch_futures_data()
         
         tempo = round(time.time() - start_time, 1)
@@ -286,19 +276,22 @@ while True:
         # Itera sobre as regiões de futuros (EUA, Ásia-Pacífico, Europa)
         for idx, (regiao, lista_futuros) in enumerate(futuros.items()):
             with cols_futuros[idx]:
+                st.markdown(f"**{regiao}**")
+                
                 if lista_futuros:
                     df_futuros = pd.DataFrame(lista_futuros)
                     
-                    # Usa 'Símbolo' como índice e formata a coluna de variação
+                    # Usa 'Símbolo' como índice
                     df_futuros.set_index('Símbolo', inplace=True)
+                    
+                    # Preenche qualquer NaN com 0.0 antes de estilizar para evitar KeyErrors
+                    df_futuros['Var. 1D (%)'] = df_futuros['Var. 1D (%)'].fillna(0.0)
                     
                     styled_futuros = df_futuros.style.map(cor, subset=['Var. 1D (%)']) \
                                                      .format({'Var. 1D (%)': '{:.2f}%'})
                     
-                    st.markdown(f"**{regiao}**")
                     st.dataframe(styled_futuros, use_container_width=True)
                 else:
-                    st.markdown(f"**{regiao}**")
                     st.info("Dados de futuros não disponíveis.")
         
         st.markdown("---") # Separador visual
@@ -324,7 +317,6 @@ while True:
         st.plotly_chart(grafico_forca(dados), use_container_width=True, key=f"plotly_{int(time.time())}")
 
         # Download CSV
-        # ... (seu código de download CSV permanece aqui) ...
         csv = pd.DataFrame(dados).to_csv(index=False, encoding='utf-8')
         st.download_button(
             label="Baixar todos os dados (CSV)",
