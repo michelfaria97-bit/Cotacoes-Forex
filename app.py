@@ -104,124 +104,99 @@ def fetch_all_turbo():
             results.append(future.result())
     return results
 
-# ==================== FUTUROS (SEM .style → NUNCA MAIS KEYERROR) ====================
+# ==================== FUTUROS – SEM .style NENHUM ====================
 @st.cache_data(ttl=55)
-def fetch_futures_data():
+def fetch_futures():
     url = 'https://br.investing.com/indices/indices-futures'
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-    resultados = {'EUA': [], 'Ásia-Pacífico': [], 'Europa': []}
-    simbolos = {
-        'Dow Jones': 'US30', 'S&P 500': 'SPX500', 'Nasdaq': 'NAS100', 'Russell 2000': 'RUS2000',
-        'Shanghai': 'CHINA50', 'Nikkei 225': 'JPN225', 'Hang Seng': 'HK50', 'Nifty 50': 'IND50',
-        'ASX 200': 'AUS200', 'Euro Stoxx 50': 'EU50', 'DAX': 'GER40', 'FTSE 100': 'UK100',
-        'CAC 40': 'FRA40', 'IBEX 35': 'ESP35', 'FTSE MIB': 'ITA40'
+    headers = {'User-Agent': 'Mozilla/5.0'}
+    mapa = {
+        'Dow Jones':'US30', 'S&P 500':'SPX500', 'Nasdaq':'NAS100', 'Russell':'RUS2000',
+        'Shanghai':'CHINA50', 'Nikkei 225':'JPN225', 'Hang Seng':'HK50', 'Nifty':'IND50',
+        'ASX 200':'AUS200', 'Stoxx 50':'EU50', 'DAX':'GER40', 'FTSE 100':'UK100',
+        'CAC 40':'FRA40', 'IBEX':'ESP35', 'FTSE MIB':'ITA40'
     }
-
+    reg = {'EUA':[], 'Ásia-Pacífico':[], 'Europa':[]}
     try:
-        r = requests.get(url, headers=headers, timeout=15)
-        soup = BeautifulSoup(r.text, 'html.parser')
-        for row in soup.select('tr.datatable-v2_row__hkEus, tr.dynamic-table-v2_row__ILVMx'):
-            try:
-                nome = row.find('a', class_='overflow-hidden')
-                if not nome: continue
-                nome = nome.get_text(strip=True)
-
-                simbolo = None
-                for chave, sigla in simbolos.items():
-                    if chave.lower() in nome.lower():
-                        simbolo = sigla
-                        break
-                if not simbolo: continue
-
-                tds = row.find_all('td')
-                if len(tds) < 8: continue
-
-                ultimo = tds[3].get_text(strip=True)
-                var_txt = tds[7].get_text(strip=True).replace('%','').replace('(','').replace(')','')
-                var = round(float(var_txt.replace(',','.')), 2) if var_txt.replace('.','').replace('-','').isdigit() or '-' in var_txt else 0.0
-
-                item = {'Símbolo': simbolo, 'Último': ultimo, 'Var %': var}
-
-                if simbolo in ['US30','SPX500','NAS100','RUS2000']: resultados['EUA'].append(item)
-                elif simbolo in ['CHINA50','JPN225','HK50','IND50','AUS200']: resultados['Ásia-Pacífico'].append(item)
-                else: resultados['Europa'].append(item)
-            except:
-                continue
-    except:
-        pass
-    return resultados
+        soup = BeautifulSoup(requests.get(url,headers=headers,timeout=15).text,'html.parser')
+        for row in soup.find_all('tr', class_=re.compile('row')):
+            tds = row.find_all('td')
+            if len(tds)<8: continue
+            nome = row.find('a')
+            if not nome: continue
+            nome = nome.get_text(strip=True)
+            simbolo = next((v for k,v in mapa.items() if k.lower() in nome.lower()), None)
+            if not simbolo: continue
+            ultimo = tds[3].get_text(strip=True)
+            var_txt = tds[7].get_text(strip=True).replace('%','').replace('(remove')).replace(')','')
+            try: var = round(float(var_txt.replace(',','.')),2)
+            except: var = 0.0
+            item = [simbolo, ultimo, var]
+            if simbolo in ['US30','SPX500','NAS100','RUS2000']: reg['EUA'].append(item)
+            elif simbolo in ['CHINA50','JPN225','HK50','IND50','AUS200']: reg['Ásia-Pacífico'].append(item)
+            else: reg['Europa'].append(item)
+    except: pass
+    return reg
 
 # ==================== LOOP PRINCIPAL ====================
-placeholder = st.empty()
-
+ph = st.empty()
 while True:
-    inicio = time.time()
-    with placeholder.container():
+    start = time.time()
+    with ph.container():
         forex = fetch_all_turbo()
-        futuros = fetch_futures_data()
+        futuros = fetch_futures()
 
-        st.markdown(f"**Atualizado:** {datetime.now():%d/%m/%Y %H:%M:%S} • Tempo: {time.time()-inicio:.1f}s")
+        st.markdown(f"**Atualizado:** {datetime.now():%d/%m/%Y %H:%M:%S} • {time.time()-start:.1f}s")
 
-        # ==================== FUTUROS (SEM .style) ====================
+        # ==================== FUTUROS – SÓ DATAFRAME PURO + HTML ====================
         st.header("Futuros de Índices Globais")
-        col1, col2, col3 = st.columns(3)
-
-        for col, regiao in zip([col1, col2, col3], ['EUA', 'Ásia-Pacífico', 'Europa']):
+        c1,c2,c3 = st.columns(3)
+        for col, região in zip([c1,c2,c3], ['EUA','Ásia-Pacífico','Europa']):
             with col:
-                st.subheader(regiao)
-                dados = futuros.get(regiao, [])
+                st.subheader(região)
+                dados = futuros.get(região, [])
                 if not dados:
                     st.info("Sem dados")
                     continue
-
-                df = pd.DataFrame(dados).set_index('Símbolo')
-
-                # Formatação de cor manual (o que resolve o KeyError)
-                def color_cell(val):
-                    try:
-                        v = float(val)
-                        color = "#00ff00" if v > 0 else "#ff4444" if v < 0 else "white"
-                        return f"color:{color}; font-weight:bold"
-                    except:
-                        return ""
-
-                df_styled = df.style.applymap(color_cell, subset=['Var %'])
-                df_styled = df_styled.format({'Var %': lambda x: f"{x:+.2f}%"})
-
-                st.dataframe(df_styled, use_container_width=True)
+                # Criamos HTML manual – 100% imune ao KeyError
+                html = "<table style='width:100%; border-collapse:collapse; font-size:14px;'>"
+                html += "<tr style='background:#0e1117; color:white;'><th>Símbolo</th><th>Último</th><th>Var %</th></tr>"
+                for simb, ult, var in dados:
+                    cor = "#00ff00" if var>0 else "#ff4444" if var<0 else "white"
+                    html += f"<tr><td style='padding:8px; text-align:left;'>{simb</td>"
+                    html += f"<td style='padding:8px; text-align:center;'>{ult}</td>"
+                    html += f"<td style='padding:8px; text-align:center; color:{cor}; font-weight:bold;'>{var:+.2f}%</td></tr>"
+                html += "</table>"
+                st.markdown(html, unsafe_allow_html=True)
 
         st.markdown("---")
 
-        # ==================== FOREX (pode continuar com .style – funciona) ====================
+        # ==================== FOREX (pode usar .style normalmente) ====================
         st.header("Pares Forex")
         grupos = {}
         for item in forex:
             base = item['Symbol'].split('/')[0]
-            nome_moeda = item['Name'].split('/')[0] if '/' in item['Name'] else base
-            grupos.setdefault(nome_moeda, []).append(item)
+            grupos.setdefault(base, []).append(item)
 
         cols = st.columns(4)
         for i, (moeda, lista) in enumerate(grupos.items()):
-            with cols[i % 4]:
+            with cols[i%4]:
                 st.subheader(moeda)
                 df = pd.DataFrame(lista)[['Symbol','Last Price','1d Change (%)']].set_index('Symbol')
-                def cor(v):
-                    try:
-                        return "color:#00ff00;font-weight:bold" if float(v)>0 else "color:#ff4444;font-weight:bold"
-                    except:
-                        return ""
-                styled = df.style.applymap(cor, subset=['1d Change (%)']).format({'1d Change (%)': '{:+.2f}%'})
+                def cor(v): 
+                    try: return "color:#00ff00;font-weight:bold" if float(v)>0 else "color:#ff4444;font-weight:bold"
+                    except: return ""
+                styled = df.style.applymap(cor, subset=['1d Change (%)']).format({'1d Change (%)':'{:+.2f}%'})
                 st.dataframe(styled, use_container_width=True)
 
-        # Gráfico
+        # Gráfico força relativa
         st.header("Força Relativa 24h")
-        df_g = pd.DataFrame(forex)
-        df_g['Moeda'] = df_g['Symbol'].str.split('/').str[0]
-        media = df_g.groupby('Moeda')['1d Change (%)'].mean().round(2).sort_values(ascending=False)
+        dfg = pd.DataFrame(forex)
+        dfg['Moeda'] = dfg['Symbol'].str.split('/').str[0]
+        media = dfg.groupby('Moeda')['1d Change (%)'].mean().round(2).sort_values(ascending=False)
         fig = px.bar(media.reset_index(), x='Moeda', y='1d Change (%)', color='1d Change (%)',
                      color_continuous_scale=['red','orange','yellow','lightgreen','green'], text='1d Change (%)')
         fig.update_traces(texttemplate='%{text}%', textposition='outside')
-        fig.add_hline(y=0, line_color='gray')
+        fig.add_hline(y=0)
         st.plotly_chart(fig, use_container_width=True)
 
     time.sleep(60)
