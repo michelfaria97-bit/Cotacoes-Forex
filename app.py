@@ -1,4 +1,4 @@
-# app.py — VERSÃO FINAL COM FUTUROS INTEGRADOS
+# app.py — VERSÃO FINAL COM FUTUROS INTEGRADOS E CORREÇÃO DE KEYERROR
 
 import streamlit as st
 import requests
@@ -89,7 +89,7 @@ def get_single_pair(symbol, name):
             return {'Symbol': symbol.upper().replace('-','/'), 'Name': name, 'Last Price': 'N/D', '1d Change (%)': 0.0}
 
         # Regex MELHORADA: pega o bloco JSON da tabela histórica (mais amplo)
-        pattern = re.compile(r'(\{"rowDate":[^}]*"last_close"[^}]*"change_precent"[^}]*"change_precentRaw"[^}]*\})', re.DOTALL)
+        pattern = re.compile(r'(\{"rowDate":[^}]*"last_close":[^}]*"change_precent":[^}]*"change_precentRaw":[^}]*\})', re.DOTALL)
         matches = pattern.findall(r.text)
         
         if matches:
@@ -243,7 +243,7 @@ def grafico_forca(data):
 
 # Função de estilo para as células de variação
 def cor(val):
-    # Garante que val é um float antes da comparação para evitar KeyErrors no pandas
+    # CORREÇÃO: Garante que val é um float antes da comparação
     try:
         val = float(val) 
     except (ValueError, TypeError):
@@ -252,7 +252,7 @@ def cor(val):
     color = 'red' if val < 0 else 'green' if val > 0 else 'gray'
     return f'color: {color}; font-weight: bold'
 
-# ==================== LOOP PRINCIPAL — VERSÃO 100% ESTÁVEL ====================
+# ==================== LOOP PRINCIPAL — VERSÃO ESTÁVEL FINAL ====================
 placeholder = st.empty()
 
 while True:
@@ -268,12 +268,13 @@ while True:
 
         st.markdown(f"**Atualização:** {datetime.now().strftime('%d/%m/%Y %H:%M:%S')} • Carregado em **{tempo}s**")
 
-        # --- TABELAS DE FUTUROS (SEPARADAS) ---
+        # ----------------------------------------------------
+        # --- TABELAS DE FUTUROS (SEPARADAS) - AJUSTE DO KEYERROR ---
+        # ----------------------------------------------------
         st.header("📈 Futuros de Índices Globais")
         
         cols_futuros = st.columns(3) # Cria 3 colunas para as regiões
 
-        # Itera sobre as regiões de futuros (EUA, Ásia-Pacífico, Europa)
         for idx, (regiao, lista_futuros) in enumerate(futuros.items()):
             with cols_futuros[idx]:
                 st.markdown(f"**{regiao}**")
@@ -281,14 +282,19 @@ while True:
                 if lista_futuros:
                     df_futuros = pd.DataFrame(lista_futuros)
                     
-                    # Usa 'Símbolo' como índice
+                    # CORREÇÃO CRÍTICA: Força a coluna Var. 1D (%) a ser numérica e preenche NaN com 0.0
+                    df_futuros['Var. 1D (%)'] = pd.to_numeric(df_futuros['Var. 1D (%)'], errors='coerce').fillna(0.0)
+                    
+                    # Garante que Último é string, para que o Styler não tente calcular nela
+                    df_futuros['Último'] = df_futuros['Último'].astype(str)
+                    
                     df_futuros.set_index('Símbolo', inplace=True)
                     
-                    # Preenche qualquer NaN com 0.0 antes de estilizar para evitar KeyErrors
-                    df_futuros['Var. 1D (%)'] = df_futuros['Var. 1D (%)'].fillna(0.0)
-                    
                     styled_futuros = df_futuros.style.map(cor, subset=['Var. 1D (%)']) \
-                                                     .format({'Var. 1D (%)': '{:.2f}%'})
+                                                     .format({
+                                                         'Var. 1D (%)': '{:.2f}%',
+                                                         'Último': '{}' # Formatado como string
+                                                     })
                     
                     st.dataframe(styled_futuros, use_container_width=True)
                 else:
@@ -296,7 +302,9 @@ while True:
         
         st.markdown("---") # Separador visual
 
+        # ----------------------------------------------------
         # --- TABELAS FOREX EXISTENTES ---
+        # ----------------------------------------------------
         st.header("💱 Pares de Moedas (Forex)")
         grupos = agrupar_por_base(dados)
 
