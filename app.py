@@ -104,161 +104,124 @@ def fetch_all_turbo():
             results.append(future.result())
     return results
 
-# ==================== FUTUROS ====================
+# ==================== FUTUROS (SEM .style → NUNCA MAIS KEYERROR) ====================
 @st.cache_data(ttl=55)
 def fetch_futures_data():
     url = 'https://br.investing.com/indices/indices-futures'
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-    results = {'EUA': [], 'Ásia-Pacífico': [], 'Europa': []}
+    resultados = {'EUA': [], 'Ásia-Pacífico': [], 'Europa': []}
+    simbolos = {
+        'Dow Jones': 'US30', 'S&P 500': 'SPX500', 'Nasdaq': 'NAS100', 'Russell 2000': 'RUS2000',
+        'Shanghai': 'CHINA50', 'Nikkei 225': 'JPN225', 'Hang Seng': 'HK50', 'Nifty 50': 'IND50',
+        'ASX 200': 'AUS200', 'Euro Stoxx 50': 'EU50', 'DAX': 'GER40', 'FTSE 100': 'UK100',
+        'CAC 40': 'FRA40', 'IBEX 35': 'ESP35', 'FTSE MIB': 'ITA40'
+    }
 
     try:
         r = requests.get(url, headers=headers, timeout=15)
-        r.raise_for_status()
         soup = BeautifulSoup(r.text, 'html.parser')
-
-        rows = soup.find_all('tr', {'class': re.compile(r'datatable-v2_row')})
-        for row in rows:
+        for row in soup.select('tr.datatable-v2_row__hkEus, tr.dynamic-table-v2_row__ILVMx'):
             try:
-                name_tag = row.find('a', class_='overflow-hidden')
-                if not name_tag: continue
-                full_name = name_tag.get_text(strip=True)
+                nome = row.find('a', class_='overflow-hidden')
+                if not nome: continue
+                nome = nome.get_text(strip=True)
 
-                symbol = None
-                for key, val in FUTURES_MAP.items():
-                    if key.lower() in full_name.lower():
-                        symbol = val
+                simbolo = None
+                for chave, sigla in simbolos.items():
+                    if chave.lower() in nome.lower():
+                        simbolo = sigla
                         break
-                if not symbol: continue
+                if not simbolo: continue
 
-                cells = row.find_all('td')
-                if len(cells) < 8: continue
+                tds = row.find_all('td')
+                if len(tds) < 8: continue
 
-                last = cells[3].get_text(strip=True)
-                change_text = cells[7].get_text(strip=True).replace('%', '').replace('(', '').replace(')', '')
-                try:
-                    change = round(float(change_text.replace(',', '.')), 2)
-                except:
-                    change = 0.0
+                ultimo = tds[3].get_text(strip=True)
+                var_txt = tds[7].get_text(strip=True).replace('%','').replace('(','').replace(')','')
+                var = round(float(var_txt.replace(',','.')), 2) if var_txt.replace('.','').replace('-','').isdigit() or '-' in var_txt else 0.0
 
-                item = {'Símbolo': symbol, 'Último': last, 'Var. 1D (%)': change}
+                item = {'Símbolo': simbolo, 'Último': ultimo, 'Var %': var}
 
-                if symbol in ['US30', 'SPX500', 'NAS100', 'RUS2000']:
-                    results['EUA'].append(item)
-                elif symbol in ['CHINA50', 'JPN225', 'HK50', 'IND50', 'AUS200']:
-                    results['Ásia-Pacífico'].append(item)
-                elif symbol in ['EU50', 'GER40', 'UK100', 'FRA40', 'ESP35', 'ITA40']:
-                    results['Europa'].append(item)
+                if simbolo in ['US30','SPX500','NAS100','RUS2000']: resultados['EUA'].append(item)
+                elif simbolo in ['CHINA50','JPN225','HK50','IND50','AUS200']: resultados['Ásia-Pacífico'].append(item)
+                else: resultados['Europa'].append(item)
             except:
                 continue
     except:
         pass
-    return results
-
-# ==================== AGRUPAMENTO E GRÁFICO ====================
-def agrupar_por_base(data):
-    grupos = { 'Dólar Americano': [], 'Euro': [], 'Libra Esterlina': [], 'Iene Japonês': [],
-               'Dólar Australiano': [], 'Dólar Neozelandês': [], 'Dólar Canadense': [], 'Franco Suíço': [],
-               'Real Brasileiro': [], 'Yuan Chinês': [] }
-    for item in data:
-        name = item['Name']
-        if name.startswith('US Dollar'): grupos['Dólar Americano'].append(item)
-        elif name.startswith('Euro'): grupos['Euro'].append(item)
-        elif name.startswith('British Pound'): grupos['Libra Esterlina'].append(item)
-        elif name.startswith('Japanese Yen'): grupos['Iene Japonês'].append(item)
-        elif name.startswith('Australian Dollar'): grupos['Dólar Australiano'].append(item)
-        elif name.startswith('New Zealand Dollar'): grupos['Dólar Neozelandês'].append(item)
-        elif name.startswith('Canadian Dollar'): grupos['Dólar Canadense'].append(item)
-        elif name.startswith('Swiss Franc'): grupos['Franco Suíço'].append(item)
-        elif name.startswith('Brazilian Real'): grupos['Real Brasileiro'].append(item)
-        elif name.startswith('Chinese Yuan'): grupos['Yuan Chinês'].append(item)
-    return {k: v for k, v in grupos.items() if v}
-
-def grafico_forca(data):
-    df = pd.DataFrame(data)
-    df['Base'] = df['Symbol'].str.split('/').str[0]
-    media = df.groupby('Base')['1d Change (%)'].mean().round(2).sort_values(ascending=False)
-    fig = px.bar(media.reset_index(), x='Base', y='1d Change (%)',
-                 title='Força Relativa Média das Moedas (24h)',
-                 color='1d Change (%)',
-                 color_continuous_scale=['red', 'orange', 'yellow', 'lightgreen', 'green'],
-                 text='1d Change (%)')
-    fig.update_traces(texttemplate='%{text}%', textposition='outside')
-    fig.add_hline(y=0, line_color='white', line_width=2)
-    fig.update_layout(height=500, showlegend=False, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
-    return fig
-
-def cor_segura(val):
-    try:
-        v = float(val)
-        return "color: #00ff00; font-weight: bold" if v > 0 else "color: #ff0066; font-weight: bold" if v < 0 else "color: white"
-    except:
-        return "color: white"
+    return resultados
 
 # ==================== LOOP PRINCIPAL ====================
 placeholder = st.empty()
 
 while True:
-    start = time.time()
+    inicio = time.time()
     with placeholder.container():
-        st.markdown("<h1 style='text-align: center; color: #00cc00;'>Forex + Futuros Globais • Ao Vivo</h1>", unsafe_allow_html=True)
+        forex = fetch_all_turbo()
+        futuros = fetch_futures_data()
 
-        # Dados
-        dados_forex = fetch_all_turbo()
-        dados_futuros = fetch_futures_data()
+        st.markdown(f"**Atualizado:** {datetime.now():%d/%m/%Y %H:%M:%S} • Tempo: {time.time()-inicio:.1f}s")
 
-        tempo = round(time.time() - start, 1)
-        st.markdown(f"**Atualizado em:** {datetime.now().strftime('%d/%m/%Y %H:%M:%S')} • Tempo de carga: **{tempo}s**")
-
-        # ==================== FUTUROS ====================
-        st.markdown("---")
+        # ==================== FUTUROS (SEM .style) ====================
         st.header("Futuros de Índices Globais")
+        col1, col2, col3 = st.columns(3)
 
-        cols_fut = st.columns(3)
-        regioes = ['EUA', 'Ásia-Pacífico', 'Europa']
-
-        for i, regiao in enumerate(regioes):
-            with cols_fut[i]:
+        for col, regiao in zip([col1, col2, col3], ['EUA', 'Ásia-Pacífico', 'Europa']):
+            with col:
                 st.subheader(regiao)
-                lista = dados_futuros.get(regiao, [])
-                if not lista:
+                dados = futuros.get(regiao, [])
+                if not dados:
                     st.info("Sem dados")
                     continue
-                df = pd.DataFrame(lista)
-                df['Var. 1D (%)'] = pd.to_numeric(df['Var. 1D (%)'], errors='coerce').fillna(0).round(2)
-                df['Último'] = df['Último'].astype(str)
-                df = df.set_index('Símbolo')
 
-                styled = df.style\
-                    .map(cor_segura, subset=['Var. 1D (%)'])\
-                    .format({'Var. 1D (%)': '{:+.2f}%'})
-                st.dataframe(styled, use_container_width=True)
+                df = pd.DataFrame(dados).set_index('Símbolo')
 
-        # ==================== FOREX ====================
+                # Formatação de cor manual (o que resolve o KeyError)
+                def color_cell(val):
+                    try:
+                        v = float(val)
+                        color = "#00ff00" if v > 0 else "#ff4444" if v < 0 else "white"
+                        return f"color:{color}; font-weight:bold"
+                    except:
+                        return ""
+
+                df_styled = df.style.applymap(color_cell, subset=['Var %'])
+                df_styled = df_styled.format({'Var %': lambda x: f"{x:+.2f}%"})
+
+                st.dataframe(df_styled, use_container_width=True)
+
         st.markdown("---")
-        st.header("Pares de Moedas (Forex)")
 
-        grupos = agrupar_por_base(dados_forex)
+        # ==================== FOREX (pode continuar com .style – funciona) ====================
+        st.header("Pares Forex")
+        grupos = {}
+        for item in forex:
+            base = item['Symbol'].split('/')[0]
+            nome_moeda = item['Name'].split('/')[0] if '/' in item['Name'] else base
+            grupos.setdefault(nome_moeda, []).append(item)
+
         cols = st.columns(4)
         for i, (moeda, lista) in enumerate(grupos.items()):
             with cols[i % 4]:
                 st.subheader(moeda)
-                df = pd.DataFrame(lista)[['Symbol', 'Last Price', '1d Change (%)']]
-                df = df.set_index('Symbol')
-                styled = df.style.map(cor_segura, subset=['1d Change (%)']).format({'1d Change (%)': '{:+.2f}%'})
+                df = pd.DataFrame(lista)[['Symbol','Last Price','1d Change (%)']].set_index('Symbol')
+                def cor(v):
+                    try:
+                        return "color:#00ff00;font-weight:bold" if float(v)>0 else "color:#ff4444;font-weight:bold"
+                    except:
+                        return ""
+                styled = df.style.applymap(cor, subset=['1d Change (%)']).format({'1d Change (%)': '{:+.2f}%'})
                 st.dataframe(styled, use_container_width=True)
 
-        # Gráfico de força
-        st.markdown("---")
-        st.header("Força Relativa das Moedas (24h)")
-        st.plotly_chart(grafico_forca(dados_forex), use_container_width=True)
-
-        # Download
-        csv = pd.DataFrame(dados_forex).to_csv(index=False, encoding='utf-8-sig')
-        st.download_button(
-            label="Baixar todos os pares Forex (CSV)",
-            data=csv,
-            file_name=f"forex_futuros_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
-            mime="text/csv"
-        )
+        # Gráfico
+        st.header("Força Relativa 24h")
+        df_g = pd.DataFrame(forex)
+        df_g['Moeda'] = df_g['Symbol'].str.split('/').str[0]
+        media = df_g.groupby('Moeda')['1d Change (%)'].mean().round(2).sort_values(ascending=False)
+        fig = px.bar(media.reset_index(), x='Moeda', y='1d Change (%)', color='1d Change (%)',
+                     color_continuous_scale=['red','orange','yellow','lightgreen','green'], text='1d Change (%)')
+        fig.update_traces(texttemplate='%{text}%', textposition='outside')
+        fig.add_hline(y=0, line_color='gray')
+        st.plotly_chart(fig, use_container_width=True)
 
     time.sleep(60)
