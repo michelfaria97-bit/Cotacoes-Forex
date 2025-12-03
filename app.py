@@ -1,5 +1,4 @@
-# app.py — VERSÃO FINAL COM FUTUROS INTEGRADOS E CORREÇÃO DE KEYERROR
-
+# app.py — VERSÃO FINAL 100% FUNCIONAL (FOREX + FUTUROS) — DEZ/2025
 import streamlit as st
 import requests
 import re
@@ -11,22 +10,19 @@ import pandas as pd
 import plotly.express as px
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+# Configuração da página
 st.set_page_config(
-    page_title="Forex ao Vivo",
+    page_title="Forex + Futuros ao Vivo",
     layout="wide",
     initial_sidebar_state="collapsed",
-    page_icon="💱",
-    menu_items={
-        'Get Help': None,
-        'Report a bug': None,
-        'About': None
-    }
+    page_icon="Chart Increasing",
+    menu_items={'About': 'Dashboard Forex + Futuros Globais • Atualizado a cada minuto'}
 )
 
-# Força o manifesto PWA (funciona no Streamlit Cloud)
+# PWA (funciona no Streamlit Cloud)
 st.markdown("""
 <link rel="manifest" href="/manifest.json">
-<meta name="theme-color" content="#1f1f1f">
+<meta name="theme-color" content="#0e1117">
 """, unsafe_allow_html=True)
 
 # ==================== PARES FOREX ====================
@@ -50,36 +46,21 @@ assets = {
         'cad-chf': 'Canadian Dollar/Swiss Franc', 'cad-nzd': 'Canadian Dollar/New Zealand Dollar', 'chf-usd': 'Swiss Franc/US Dollar',
         'chf-jpy': 'Swiss Franc/Japanese Yen', 'chf-gbp': 'Swiss Franc/British Pound', 'chf-cad': 'Swiss Franc/Canadian Dollar',
         'chf-nzd': 'Swiss Franc/New Zealand Dollar', 'cad-eur': 'Canadian Dollar/Euro', 'usd-eur': 'US Dollar/Euro', 'usd-gbp': 'US Dollar/British Pound',
-        'jpy-aud': 'Japanese Yen/Australian Dollar', 'brl-cad': 'Brazilian Real/Canadian Dollar', 'cny-usd': 'Chinese Yuan/US Dollar',
-        'cny-nzd': 'Chinese Yuan/New Zealand Dollar', 'cny-jpy': 'Chinese Yuan/Japanese Yen', 'cny-gbp': 'Chinese Yuan/British Pound',
-        'cny-chf': 'Chinese Yuan/Swiss Franc', 'cny-aud': 'Chinese Yuan/Australian Dollar', 'cny-eur': 'Chinese Yuan/Euro',
-        'brl-usd': 'Brazilian Real/US Dollar', 'brl-jpy': 'Brazilian Real/Japanese Yen', 'brl-gbp': 'Brazilian Real/British Pound', 'brl-nzd': 'Brazilian Real/New Zealand Dollar', 
-        'brl-aud': 'Brazilian Real/Australian Dollar', 'brl-eur': 'Brazilian Real/Euro'
+        'jpy-aud': 'Japanese Yen/Australian Dollar', 'brl-usd': 'Brazilian Real/US Dollar', 'brl-jpy': 'Brazilian Real/Japanese Yen',
+        'brl-gbp': 'Brazilian Real/British Pound', 'brl-nzd': 'Brazilian Real/New Zealand Dollar', 'brl-aud': 'Brazilian Real/Australian Dollar',
+        'brl-eur': 'Brazilian Real/Euro', 'cny-usd': 'Chinese Yuan/US Dollar'
     }
 }
 
-# Mapeamento do nome completo do índice para o símbolo curto desejado
+# Mapeamento dos nomes completos → símbolos que você quer exibir
 FUTURES_MAP = {
-    # EUA
-    'Dow Jones': 'US30F',
-    'S&P 500': 'ESF',
-    'Nasdaq 100': 'NDQF',
-    'Russell 2000': 'RTYF',
-    # Ásia-Pacífico
-    'Shanghai SE': 'SCIF', 
-    'Nikkei': 'NK225F',
-    'Hang Seng Index': 'HSF',
-    'Nifty 50': 'NIFTYF',
-    'ASX 200': 'ASX200F',
-    # Europa
-    'Stoxx 600': 'STX600F',
-    'DAX': 'DAXF',
-    'FTSE 100': 'FTSEF',
-    'CAC 40': 'CAC40F',
-    'FTSE MIB': 'MIBF',
+    'Dow Jones': 'US30', 'S&P 500': 'SPX500', 'Nasdaq 100': 'NAS100', 'Russell 2000': 'RUS2000',
+    'Shanghai Composite': 'CHINA50', 'Nikkei 225': 'JPN225', 'Hang Seng': 'HK50', 'Nifty 50': 'IND50',
+    'S&P/ASX 200': 'AUS200', 'Euro Stoxx 50': 'EU50', 'DAX': 'GER40', 'FTSE 100': 'UK100',
+    'CAC 40': 'FRA40', 'IBEX 35': 'ESP35', 'FTSE MIB': 'ITA40'
 }
 
-# ==================== FUNÇÃO TURBO CORRIGIDA (FOREX) ====================
+# ==================== FOREX TURBO ====================
 def get_single_pair(symbol, name):
     url = f'https://br.investing.com/currencies/{symbol}-historical-data'
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
@@ -88,130 +69,96 @@ def get_single_pair(symbol, name):
         if r.status_code != 200:
             return {'Symbol': symbol.upper().replace('-','/'), 'Name': name, 'Last Price': 'N/D', '1d Change (%)': 0.0}
 
-        # Regex MELHORADA: pega o bloco JSON da tabela histórica (mais amplo)
-        pattern = re.compile(r'(\{"rowDate":[^}]*"last_close":[^}]*"change_precent":[^}]*"change_precentRaw":[^}]*\})', re.DOTALL)
-        matches = pattern.findall(r.text)
-        
-        if matches:
-            data = json.loads(matches[0])  # Primeiro match = linha mais recente
+        # Tenta pegar do JSON embutido na tabela histórica
+        match = re.search(r'({"rowDate".*?})', r.text)
+        if match:
+            data = json.loads(match.group(1))
             price = data.get('last_close', 'N/D')
-            if price and isinstance(price, str):
-                price = price.strip().replace(',', '.')  # Limpa formatação BR
-
-            # Usa change_precentRaw (número puro, sem % ou parênteses)
-            raw_change = data.get('change_precentRaw')
-            if raw_change is not None:
-                change_pct = round(float(raw_change), 2)
-            else:
-                # Fallback: limpa o texto de change_precent
-                text_change = data.get('change_precent', '0')
-                # Remove parênteses, % e limpa (ex: "(-0,06%)" → -0.06)
-                num = re.sub(r'[^\d,.-]', '', text_change).replace(',', '.')
-                change_pct = round(float(num or 0), 2)
+            if isinstance(price, str):
+                price = price.replace(',', '.')
+            change = data.get('change_precentRaw', 0.0)
         else:
-            # Fallback: extrai do HEADER (como no seu HTML) se tabela falhar
+            # Fallback: header da página
             soup = BeautifulSoup(r.text, 'html.parser')
-            price_elem = soup.find('div', {'data-test': 'instrument-price-last'})
-            change_elem = soup.find('span', {'data-test': 'instrument-price-change-percent'})
-            
-            price = price_elem.text.strip() if price_elem else 'N/D'
-            change_text = change_elem.text.strip() if change_elem else '(0,00%)'
-            # Limpa % do header (ex: "(-0,06%)" → -0.06)
-            num = re.sub(r'[^\d,.-]', '', change_text).replace(',', '.')
-            change_pct = round(float(num or 0), 2)
+            price = soup.find('div', {'data-test': 'instrument-price-last'})
+            change_tag = soup.find('span', {'data-test': 'instrument-price-change-percent'})
+            price = price.text.strip() if price else 'N/D'
+            change_text = change_tag.text.strip() if change_tag else '0%'
+            change = float(re.sub(r'[^\d.-]', '', change_text.replace(',', '.')) or 0)
 
         return {
             'Symbol': symbol.upper().replace('-', '/'),
             'Name': name,
             'Last Price': price,
-            '1d Change (%)': change_pct
+            '1d Change (%)': round(float(change), 2)
         }
-
-    except Exception as e:
+    except:
         return {'Symbol': symbol.upper().replace('-','/'), 'Name': name, 'Last Price': 'Erro', '1d Change (%)': 0.0}
 
 @st.cache_data(ttl=55)
 def fetch_all_turbo():
     results = []
-    with ThreadPoolExecutor(max_workers=15) as executor:
-        futures = {executor.submit(get_single_pair, symbol, name): symbol for symbol, name in assets['Forex'].items()}
-        for future in as_completed(futures):
+    with ThreadPoolExecutor(max_workers=20) as executor:
+        future_to_symbol = {executor.submit(get_single_pair, symbol, name): symbol for symbol, name in assets['Forex'].items()}
+        for future in as_completed(future_to_symbol):
             results.append(future.result())
     return results
 
-# ==================== FUNÇÃO DE RASPAGEM FUTUROS (NOVA) ====================
+# ==================== FUTUROS ====================
 @st.cache_data(ttl=55)
 def fetch_futures_data():
-    """
-    Raspa dados de futuros de https://br.investing.com/indices/indices-futures
-    e retorna os dados em um dicionário agrupado.
-    """
     url = 'https://br.investing.com/indices/indices-futures'
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
     results = {'EUA': [], 'Ásia-Pacífico': [], 'Europa': []}
 
     try:
         r = requests.get(url, headers=headers, timeout=15)
-        r.raise_for_status() 
+        r.raise_for_status()
         soup = BeautifulSoup(r.text, 'html.parser')
 
-        # Busca linhas de dados nas tabelas
-        rows = soup.find_all('tr', class_=re.compile(r'datatable-v2_row__hkEus dynamic-table-v2_row__ILVMx'))
-
+        rows = soup.find_all('tr', {'class': re.compile(r'datatable-v2_row')})
         for row in rows:
             try:
                 name_tag = row.find('a', class_='overflow-hidden')
                 if not name_tag: continue
-                
-                name_full = name_tag.find('span', dir='ltr').text.strip()
-                symbol = FUTURES_MAP.get(name_full, None)
-                if not symbol: continue 
+                full_name = name_tag.get_text(strip=True)
+
+                symbol = None
+                for key, val in FUTURES_MAP.items():
+                    if key.lower() in full_name.lower():
+                        symbol = val
+                        break
+                if not symbol: continue
 
                 cells = row.find_all('td')
-                
-                # Último (célula 3)
-                last_price_tag = cells[3].find('span') or cells[3]
-                last_price = last_price_tag.text.strip()
-                
-                # Var. % (célula 7)
-                change_pct_text = cells[7].text.strip().replace(',', '.').replace('%', '').replace('(', '').replace(')', '')
-                
-                # TENTA CONVERTER PARA FLOAT, SENÃO USA 0.0
+                if len(cells) < 8: continue
+
+                last = cells[3].get_text(strip=True)
+                change_text = cells[7].get_text(strip=True).replace('%', '').replace('(', '').replace(')', '')
                 try:
-                    change_pct = float(change_pct_text)
-                except ValueError:
-                    change_pct = 0.0
+                    change = round(float(change_text.replace(',', '.')), 2)
+                except:
+                    change = 0.0
 
-                item = {
-                    'Símbolo': symbol,
-                    'Último': last_price,
-                    'Var. 1D (%)': change_pct
-                }
-                
-                # Classificação do índice na região correta
-                if symbol in ['US30F', 'ESF', 'NDQF', 'RTYF']:
+                item = {'Símbolo': symbol, 'Último': last, 'Var. 1D (%)': change}
+
+                if symbol in ['US30', 'SPX500', 'NAS100', 'RUS2000']:
                     results['EUA'].append(item)
-                elif symbol in ['SCIF', 'NK225F', 'HSF', 'NIFTYF', 'ASX200F']:
+                elif symbol in ['CHINA50', 'JPN225', 'HK50', 'IND50', 'AUS200']:
                     results['Ásia-Pacífico'].append(item)
-                elif symbol in ['STX600F', 'DAXF', 'FTSEF', 'CAC40F', 'MIBF']:
+                elif symbol in ['EU50', 'GER40', 'UK100', 'FRA40', 'ESP35', 'ITA40']:
                     results['Europa'].append(item)
-                    
-            except Exception:
-                 continue
-
-    except requests.exceptions.RequestException:
+            except:
+                continue
+    except:
         pass
-        
     return results
 
-
-# ==================== AGRUPAMENTO (FOREX) ====================
+# ==================== AGRUPAMENTO E GRÁFICO ====================
 def agrupar_por_base(data):
-    grupos = {
-        'Dólar Americano': [], 'Euro': [], 'Libra Esterlina': [], 'Iene Japonês': [],
-        'Dólar Australiano': [], 'Dólar Neozelandês': [], 'Dólar Canadense': [], 'Franco Suíço': [],
-        'Real Brasileiro': [], 'Yuan Chinês': []
-    }
+    grupos = { 'Dólar Americano': [], 'Euro': [], 'Libra Esterlina': [], 'Iene Japonês': [],
+               'Dólar Australiano': [], 'Dólar Neozelandês': [], 'Dólar Canadense': [], 'Franco Suíço': [],
+               'Real Brasileiro': [], 'Yuan Chinês': [] }
     for item in data:
         name = item['Name']
         if name.startswith('US Dollar'): grupos['Dólar Americano'].append(item)
@@ -226,112 +173,92 @@ def agrupar_por_base(data):
         elif name.startswith('Chinese Yuan'): grupos['Yuan Chinês'].append(item)
     return {k: v for k, v in grupos.items() if v}
 
-# ==================== GRÁFICO (FOREX) ====================
 def grafico_forca(data):
     df = pd.DataFrame(data)
     df['Base'] = df['Symbol'].str.split('/').str[0]
     media = df.groupby('Base')['1d Change (%)'].mean().round(2).sort_values(ascending=False)
     fig = px.bar(media.reset_index(), x='Base', y='1d Change (%)',
-                 title='Força Relativa Média (1 dia)',
+                 title='Força Relativa Média das Moedas (24h)',
                  color='1d Change (%)',
                  color_continuous_scale=['red', 'orange', 'yellow', 'lightgreen', 'green'],
                  text='1d Change (%)')
     fig.update_traces(texttemplate='%{text}%', textposition='outside')
     fig.add_hline(y=0, line_color='white', line_width=2)
-    fig.update_layout(height=500, showlegend=False)
+    fig.update_layout(height=500, showlegend=False, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
     return fig
 
-# Função de estilo para as células de variação
-def cor(val):
-    # CORREÇÃO: Garante que val é um float antes da comparação
+def cor_segura(val):
     try:
-        val = float(val) 
-    except (ValueError, TypeError):
-        val = 0.0
-        
-    color = 'red' if val < 0 else 'green' if val > 0 else 'gray'
-    return f'color: {color}; font-weight: bold'
+        v = float(val)
+        return "color: #00ff00; font-weight: bold" if v > 0 else "color: #ff0066; font-weight: bold" if v < 0 else "color: white"
+    except:
+        return "color: white"
 
-# ==================== LOOP PRINCIPAL — VERSÃO ESTÁVEL FINAL ====================
+# ==================== LOOP PRINCIPAL ====================
 placeholder = st.empty()
 
 while True:
-    start_time = time.time()
+    start = time.time()
     with placeholder.container():
-        # 1. Busca dados de Forex
-        dados = fetch_all_turbo() 
-        
-        # 2. Busca dados de Futuros
-        futuros = fetch_futures_data()
-        
-        tempo = round(time.time() - start_time, 1)
+        st.markdown("<h1 style='text-align: center; color: #00cc00;'>Forex + Futuros Globais • Ao Vivo</h1>", unsafe_allow_html=True)
 
-        st.markdown(f"**Atualização:** {datetime.now().strftime('%d/%m/%Y %H:%M:%S')} • Carregado em **{tempo}s**")
+        # Dados
+        dados_forex = fetch_all_turbo()
+        dados_futuros = fetch_futures_data()
 
-        # ----------------------------------------------------
-        # --- TABELAS DE FUTUROS (SEPARADAS) - AJUSTE DO KEYERROR ---
-        # ----------------------------------------------------
-        st.header("📈 Futuros de Índices Globais")
-        
-        cols_futuros = st.columns(3) # Cria 3 colunas para as regiões
+        tempo = round(time.time() - start, 1)
+        st.markdown(f"**Atualizado em:** {datetime.now().strftime('%d/%m/%Y %H:%M:%S')} • Tempo de carga: **{tempo}s**")
 
-        for idx, (regiao, lista_futuros) in enumerate(futuros.items()):
-            with cols_futuros[idx]:
-                st.markdown(f"**{regiao}**")
-                
-                if lista_futuros:
-                    df_futuros = pd.DataFrame(lista_futuros)
-                    
-                    # CORREÇÃO CRÍTICA: Força a coluna Var. 1D (%) a ser numérica e preenche NaN com 0.0
-                    df_futuros['Var. 1D (%)'] = pd.to_numeric(df_futuros['Var. 1D (%)'], errors='coerce').fillna(0.0)
-                    
-                    # Garante que Último é string, para que o Styler não tente calcular nela
-                    df_futuros['Último'] = df_futuros['Último'].astype(str)
-                    
-                    df_futuros.set_index('Símbolo', inplace=True)
-                    
-                    styled_futuros = df_futuros.style.map(cor, subset=['Var. 1D (%)']) \
-                                                     .format({
-                                                         'Var. 1D (%)': '{:.2f}%',
-                                                         'Último': '{}' # Formatado como string
-                                                     })
-                    
-                    st.dataframe(styled_futuros, use_container_width=True)
-                else:
-                    st.info("Dados de futuros não disponíveis.")
-        
-        st.markdown("---") # Separador visual
+        # ==================== FUTUROS ====================
+        st.markdown("---")
+        st.header("Futuros de Índices Globais")
 
-        # ----------------------------------------------------
-        # --- TABELAS FOREX EXISTENTES ---
-        # ----------------------------------------------------
-        st.header("💱 Pares de Moedas (Forex)")
-        grupos = agrupar_por_base(dados)
+        cols_fut = st.columns(3)
+        regioes = ['EUA', 'Ásia-Pacífico', 'Europa']
 
-        cols = st.columns(4)
-        for idx, (titulo, lista) in enumerate(grupos.items()):
-            with cols[idx % 4]:
-                df = pd.DataFrame(lista)[['Symbol', 'Last Price', '1d Change (%)']]
-                df.set_index('Symbol', inplace=True)
+        for i, regiao in enumerate(regioes):
+            with cols_fut[i]:
+                st.subheader(regiao)
+                lista = dados_futuros.get(regiao, [])
+                if not lista:
+                    st.info("Sem dados")
+                    continue
+                df = pd.DataFrame(lista)
+                df['Var. 1D (%)'] = pd.to_numeric(df['Var. 1D (%)'], errors='coerce').fillna(0).round(2)
+                df['Último'] = df['Último'].astype(str)
+                df = df.set_index('Símbolo')
 
-                styled = df.style.map(cor, subset=['1d Change (%)']) \
-                                 .format({'1d Change (%)': '{:.2f}%'})
-
-                st.subheader(titulo)
+                styled = df.style\
+                    .map(cor_segura, subset=['Var. 1D (%)'])\
+                    .format({'Var. 1D (%)': '{:+.2f}%'})
                 st.dataframe(styled, use_container_width=True)
 
-        # GRÁFICO (USA APENAS DADOS DE FOREX)
-        st.header("📊 Força Relativa das Moedas")
-        st.plotly_chart(grafico_forca(dados), use_container_width=True, key=f"plotly_{int(time.time())}")
+        # ==================== FOREX ====================
+        st.markdown("---")
+        st.header("Pares de Moedas (Forex)")
 
-        # Download CSV
-        csv = pd.DataFrame(dados).to_csv(index=False, encoding='utf-8')
+        grupos = agrupar_por_base(dados_forex)
+        cols = st.columns(4)
+        for i, (moeda, lista) in enumerate(grupos.items()):
+            with cols[i % 4]:
+                st.subheader(moeda)
+                df = pd.DataFrame(lista)[['Symbol', 'Last Price', '1d Change (%)']]
+                df = df.set_index('Symbol')
+                styled = df.style.map(cor_segura, subset=['1d Change (%)']).format({'1d Change (%)': '{:+.2f}%'})
+                st.dataframe(styled, use_container_width=True)
+
+        # Gráfico de força
+        st.markdown("---")
+        st.header("Força Relativa das Moedas (24h)")
+        st.plotly_chart(grafico_forca(dados_forex), use_container_width=True)
+
+        # Download
+        csv = pd.DataFrame(dados_forex).to_csv(index=False, encoding='utf-8-sig')
         st.download_button(
-            label="Baixar todos os dados (CSV)",
+            label="Baixar todos os pares Forex (CSV)",
             data=csv,
-            file_name=f"forex_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
+            file_name=f"forex_futuros_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
             mime="text/csv"
         )
-
 
     time.sleep(60)
