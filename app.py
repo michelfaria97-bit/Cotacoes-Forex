@@ -189,7 +189,7 @@ while True:
                      text="Change", height=500)
         fig.update_traces(texttemplate="%{text:+.2f}%", textposition="outside")
         fig.add_hline(y=0, line_color="gray", line_width=2)
-        fig.update_layout(showlegend=False, plot_bgcolor="rgba(0,0,0,0), paper_bgcolor="rgba(0,0,0,0))
+        fig.update_layout(showlegend=False, plot_bgcolor= "rgba(0,0,0,0), paper_bgcolor="rgba(0,0,0,0)"")
         st.plotly_chart(fig, use_container_width=True)
 
         # ==================== DOWNLOAD CSV ====================
@@ -197,4 +197,5 @@ while True:
         st.download_button("Baixar dados Forex (CSV)", csv, f"forex_{datetime.now():%Y%m%d_%H%M}.csv", "text/csv")
 
     time.sleep(60)
+
 
