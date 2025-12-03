@@ -1,4 +1,4 @@
-# app.py — VERSÃO FINAL ESTÁVEL (FOREX + FUTUROS) — NUNCA MAIS DÁ KEYERROR
+# app.py — VERSÃO FINAL 100% FUNCIONAL (FOREX + FUTUROS) — DEZ/2025
 import streamlit as st
 import requests
 import re
@@ -10,6 +10,7 @@ import pandas as pd
 import plotly.express as px
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+# ===================== CONFIGURAÇÃO =====================
 st.set_page_config(
     page_title="Forex + Futuros ao Vivo",
     layout="wide",
@@ -19,17 +20,17 @@ st.set_page_config(
 
 st.markdown("""
 <style>
-    .big-font {font-size: 40px !important; text-align: center; color: #00ff88; font-weight: bold;}
-    .time {font-size: 18px; color: #aaaaaa; text-align: center;}
-    table {width: 100%; border-collapse: collapse; margin: 10px 0;}
-    th, td {padding: 10px; text-align: center; border-bottom: 1px solid #333;}
-    th {background: #0e1117; color: white;}
+    .big-font {font-size: 38px !important; text-align: center; color: #00ff88; font-weight: bold; margin-bottom:0;}
+    .time {font-size: 18px; color: #cccccc; text-align: center; margin-top:5px;}
+    table {width:100%; border-collapse:collapse; font-size:14px; margin:10px 0;}
+    th, td {padding: 10px; text-align: center;}
+    th {background:#111; color:white;}
 </style>
 """, unsafe_allow_html=True)
 
 st.markdown('<p class="big-font">Forex + Futuros Globais • Ao Vivo</p>', unsafe_allow_html=True)
 
-# ==================== TODOS OS PARES FOREX (80+) ====================
+# ===================== TODOS OS PARES FOREX =====================
 assets = {
     'Forex': {
         'eur-usd': 'Euro/US Dollar', 'gbp-usd': 'British Pound/US Dollar', 'usd-jpy': 'US Dollar/Japanese Yen',
@@ -53,17 +54,16 @@ assets = {
         'usd-gbp': 'US Dollar/British Pound', 'jpy-aud': 'Japanese Yen/Australian Dollar', 'brl-usd': 'Brazilian Real/US Dollar',
         'brl-jpy': 'Brazilian Real/Japanese Yen', 'brl-gbp': 'Brazilian Real/British Pound', 'brl-nzd': 'Brazilian Real/New Zealand Dollar',
         'brl-aud': 'Brazilian Real/Australian Dollar', 'brl-eur': 'Brazilian Real/Euro', 'cny-usd': 'Chinese Yuan/US Dollar',
-        'cny-eur': 'Chinese Yuan/Euro', 'cny-jpy': 'Chinese Yuan/Japanese Yen'
+        'cny-eur': 'Chinese Yuan/Euro', 'cny-jpy': 'Chinese Yuan/Japanese Yen', 'cny-gbp': 'Chinese Yuan/British Pound'
     }
 }
 
-# ==================== FOREX (funciona perfeitamente) ====================
+# ===================== FOREX =====================
 def get_pair(symbol):
     url = f"https://br.investing.com/currencies/{symbol}-historical-data"
     headers = {"User-Agent": "Mozilla/5.0"}
     try:
         r = requests.get(url, headers=headers, timeout=10)
-        # JSON embutido
         m = re.search(r'({"rowDate".*?})', r.text)
         if m:
             d = json.loads(m.group(1))
@@ -71,10 +71,10 @@ def get_pair(symbol):
             change = float(d.get("change_precentRaw", 0))
         else:
             soup = BeautifulSoup(r.text, "html.parser")
-            price = soup.select_one("[data-test='instrument-price-last']")
-            price = price.text.strip() if price else "N/D"
-            chg = soup.select_one("[data-test='instrument-price-change-percent']")
-            txt = chg.text.strip() if chg else "0%"
+            price_el = soup.select_one("[data-test='instrument-price-last']")
+            price = price_el.get_text(strip=True) if price_el else "N/D"
+            chg_el = soup.select_one("[data-test='instrument-price-change-percent']")
+            txt = chg_el.get_text(strip=True) if chg_el else "0%"
             change = float(re.sub(r"[^\d.-]", "", txt.replace(",", ".")) or 0)
         return {"Symbol": symbol.upper().replace("-", "/"), "Price": price, "Change": round(change, 2)}
     except:
@@ -82,11 +82,11 @@ def get_pair(symbol):
 
 @st.cache_data(ttl=55)
 def fetch_forex():
-    with ThreadPoolExecutor(max_workers=25) as ex:
-        futures = [ex.submit(get_pair, s) for s in assets['Forex'].keys()]
+    with ThreadPoolExecutor(max_workers=30) as ex:
+        futures = [ex.submit(get_pair, s) for s in assets['Forex']]
         return [f.result() for f in as_completed(futures)]
 
-# ==================== FUTUROS (SEM .style → nunca dá erro) ====================
+# ===================== FUTUROS (SEM .style → nunca dá KeyError) =====================
 @st.cache_data(ttl=55)
 def fetch_futures():
     url = "https://br.investing.com/indices/indices-futures"
@@ -103,9 +103,9 @@ def fetch_futures():
         for row in soup.find_all("tr", class_=re.compile("row")):
             tds = row.find_all("td")
             if len(tds) < 8: continue
-            nome_tag = row.find("a")
-            if not nome_tag: continue
-            nome = nome_tag.get_text(strip=True)
+            a = row.find("a")
+            if not a: continue
+            nome = a.get_text(strip=True)
             simbolo = next((v for k, v in mapa.items() if k.lower() in nome.lower()), None)
             if not simbolo: continue
             ultimo = tds[3].get_text(strip=True)
@@ -125,25 +125,24 @@ def fetch_futures():
         pass
     return dados
 
-# ==================== LOOP PRINCIPAL ====================
+# ===================== LOOP PRINCIPAL =====================
 placeholder = st.empty()
 
 while True:
-    inicio = time.time()
+    start = time.time()
     with placeholder.container():
         forex = fetch_forex()
         futuros = fetch_futures()
 
-        st.markdown(f'<p class="time">Atualizado: {datetime.now():%d/%m/%Y %H:%M:%S} • Tempo: {time.time()-inicio:.1f}s</p>', unsafe_allow_html=True)
+        st.markdown(f'<p class="time">Atualizado: {datetime.now():%d/%m/%Y %H:%M:%S} • Tempo de carga: {time.time()-start:.1f}s</p>', 
+                    unsafe_allow_html=True)
 
-        # ==================== FUTUROS (HTML PURO – 100% estável) ====================
+        # ===================== FUTUROS (HTML PURO) =====================
         st.markdown("### Futuros de Índices Globais")
-        col1, col2, col3 = st.columns(3)
-
+        c1, c2, c3 = st.columns(3)
         regioes = ["EUA", "Ásia-Pacífico", "Europa"]
-        cols = [col1, col2, col3]
 
-        for regiao, col in zip(regioes, cols):
+        for col, regiao in zip([c1, c2, c3], regioes):
             with col:
                 st.markdown(f"**{regiao}**")
                 lista = futuros.get(regiao, [])
@@ -159,7 +158,7 @@ while True:
 
         st.markdown("---")
 
-        # ==================== FOREX (com .style – funciona perfeitamente) ====================
+        # ===================== FOREX (com .style) =====================
         st.markdown("### Pares Forex ao Vivo")
         grupos = {}
         for item in forex:
@@ -179,23 +178,38 @@ while True:
                 styled = df.style.applymap(cor, subset=["Change"]).format({"Change": "{:+.2f}%"})
                 st.dataframe(styled, use_container_width=True)
 
-        # ==================== GRÁFICO FORÇA RELATIVA ====================
+        # ===================== GRÁFICO FORÇA RELATIVA =====================
         st.markdown("### Força Relativa das Moedas (24h)")
-        dfg = pd.DataFrame(forex)
-        dfg["Moeda"] = dfg["Symbol"].str.split("/").str[0]
-        media = dfg.groupby("Moeda")["Change"].mean().round(2).sort_values(ascending=False)
-        fig = px.bar(media.reset_index(), x="Moeda", y="Change", color="Change",
-                     color_continuous_scale=["#ff4444", "#ffaa44", "#ffff44", "#88ff88", "#00ff88"],
-                     text="Change", height=500)
+        df_graf = pd.DataFrame(forex)
+        df_graf["Moeda"] = df_graf["Symbol"].str.split("/").str[0]
+        media = df_graf.groupby("Moeda")["Change"].mean().round(2).sort_values(ascending=False)
+
+        fig = px.bar(
+            media.reset_index(), 
+            x="Moeda", 
+            y="Change",
+            color="Change",
+            color_continuous_scale=["#ff4444", "#ff8800", "#ffff00", "#88ff88", "#00ff88"],
+            text="Change",
+            height=500
+        )
         fig.update_traces(texttemplate="%{text:+.2f}%", textposition="outside")
         fig.add_hline(y=0, line_color="gray", line_width=2)
-        fig.update_layout(showlegend=False, plot_bgcolor= "rgba(0,0,0,0), paper_bgcolor="rgba(0,0,0,0)"")
+        fig.update_layout(
+            showlegend=False,
+            plot_bgcolor="rgba(0,0,0,0)",
+            paper_bgcolor="rgba(0,0,0,0)",
+            font_color="white"
+        )
         st.plotly_chart(fig, use_container_width=True)
 
-        # ==================== DOWNLOAD CSV ====================
-        csv = pd.DataFrame(forex).to_csv(index=False, encoding="utf-8-sig")
-        st.download_button("Baixar dados Forex (CSV)", csv, f"forex_{datetime.now():%Y%m%d_%H%M}.csv", "text/csv")
+        # ===================== DOWNLOAD CSV =====================
+        csv_data = pd.DataFrame(forex).to_csv(index=False, encoding="utf-8-sig")
+        st.download_button(
+            label="Baixar todos os pares Forex (CSV)",
+            data=csv_data,
+            file_name=f"forex_{datetime.now():%Y%m%d_%H%M}.csv",
+            mime="text/csv"
+        )
 
     time.sleep(60)
-
-
