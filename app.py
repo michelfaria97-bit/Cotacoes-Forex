@@ -92,40 +92,74 @@ def fetch_forex():
 def fetch_futures():
     url = "https://br.investing.com/indices/indices-futures"
     headers = {"User-Agent": "Mozilla/5.0"}
+    
+    # Mapeamento exato → símbolo desejado (só o contrato principal)
     mapa = {
-        "Dow Jones": "US30", "S&P 500": "SPX500", "Nasdaq": "NAS100", "Russell 2000": "RUS2000",
-        "Shanghai": "CHINA50", "Nikkei 225": "JPN225", "Hang Seng": "HK50", "Nifty": "IND50",
-        "ASX 200": "AUS200", "Stoxx 50": "EU50", "DAX": "GER40", "FTSE 100": "UK100",
-        "CAC 40": "FRA40", "IBEX 35": "ESP35", "FTSE MIB": "ITA40"
+        "Dow Jones": "US30",
+        "S&P 500": "SPX500",
+        "Nasdaq 100": "NAS100",        # pega o primeiro que aparecer
+        "Russell 2000": "RUS2000",
+        "Shanghai": "CHINA50",
+        "Nikkei 225": "JPN225",
+        "Hang Seng": "HK50",
+        "Nifty 50": "IND50",
+        "S&P/ASX 200": "AUS200",
+        "Euro Stoxx 50": "EU50",
+        "DAX": "GER40",
+        "FTSE 100": "UK100",
+        "CAC 40": "FRA40",
+        "IBEX 35": "ESP35",
+        "FTSE MIB": "ITA40"
     }
+    
+    # Para evitar duplicatas
+    já_exibido = set()
     dados = {"EUA": [], "Ásia-Pacífico": [], "Europa": []}
+    
     try:
         soup = BeautifulSoup(requests.get(url, headers=headers, timeout=15).text, "html.parser")
         for row in soup.find_all("tr", class_=re.compile("row")):
             tds = row.find_all("td")
             if len(tds) < 8: continue
-            a = row.find("a")
-            if not a: continue
-            nome = a.get_text(strip=True)
-            simbolo = next((v for k, v in mapa.items() if k.lower() in nome.lower()), None)
-            if not simbolo: continue
+            
+            a_tag = row.find("a")
+            if not a_tag: continue
+            nome_completo = a_tag.get_text(strip=True)
+            
+            # Procura qual índice está no nome
+            simbolo = None
+            for chave, sigla in mapa.items():
+                if chave.lower() in nome_completo.lower():
+                    simbolo = sigla
+                    break
+            
+            if not simbolo or simbolo in já_exibido:
+                continue
+                
+            # === PEGA SÓ O PRIMEIRO (contrato front month) ===
+            já_exibido.add(simbolo)
+            
             ultimo = tds[3].get_text(strip=True)
             var_txt = tds[7].get_text(strip=True).replace("%", "").replace("(", "-").replace(")", "")
             try:
                 var = round(float(var_txt.replace(",", ".")), 2)
             except:
                 var = 0.0
+                
             item = (simbolo, ultimo, var)
+            
             if simbolo in ["US30", "SPX500", "NAS100", "RUS2000"]:
                 dados["EUA"].append(item)
             elif simbolo in ["CHINA50", "JPN225", "HK50", "IND50", "AUS200"]:
                 dados["Ásia-Pacífico"].append(item)
             else:
                 dados["Europa"].append(item)
-    except:
+                
+    except Exception as e:
         pass
+        
     return dados
-
+    
 # ===================== LOOP PRINCIPAL =====================
 placeholder = st.empty()
 
@@ -214,4 +248,5 @@ while True:
         )
 
     time.sleep(60)
+
 
