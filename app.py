@@ -86,9 +86,9 @@ def get_single_non_forex(category, symbol, name):
     if symbol == 'usdollar':
         url = 'https://br.investing.com/indices/usdollar'
     elif symbol == 'btc-usd':
-        url = 'https://br.investing.com/crypto/bitcoin/btc-usd?cid=1035793'
+        url = 'https://br.investing.com/indices/investing.com-btc-usd'
     elif symbol == 'eth-usd':
-        url = 'https://br.investing.com/crypto/ethereum/eth-usd'
+        url = 'https://br.investing.com/indices/investing.com-eth-usd'
     elif category in ['USA', 'Asia/Pacifico', 'Europa']:
         url = f'https://br.investing.com/indices/{symbol}'
     else:
@@ -167,8 +167,9 @@ while True:
     inicio = time.time()
     with placeholder.container():
         dados = fetch_all()
+        agora_brasil = datetime.now(tz_brasil)
 
-        st.markdown(f"**Atualizado:** {datetime.now():%d/%m/%Y %H:%M:%S} • Tempo: {time.time()-inicio:.1f}s")
+        st.markdown(f"**Atualizado:** {agora_brasil.strftime('%d/%m/%Y %H:%M:%S')} (Brasília) • Tempo: {time.time()-inicio:.1f}s")
         st.markdown("---")
 
         # GRÁFICO DE FORÇA (MANTIDO!)
@@ -224,5 +225,6 @@ while True:
         st.download_button("Baixar todos os dados (CSV)", csv, f"cotacoes_{datetime.now():%Y%m%d_%H%M}.csv", "text/csv")
 
     time.sleep(60)
+
 
 
