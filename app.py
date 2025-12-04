@@ -1,4 +1,4 @@
-# app.py — VERSÃO FINAL COM GRÁFICO DE FORÇA RELATIVA + NOVAS COTAÇÕES
+# app.py — VERSÃO FINAL COM GRÁFICO DE FORÇA RELATIVA + NOVAS COTAÇÕES (Forex Agrupado Corretamente)
 
 import streamlit as st
 import requests
@@ -94,14 +94,46 @@ ASSET_TYPES = {
     'Crypto': 'crypto'
 }
 
+# ==================== FUNÇÕES DE AGRUPAMENTO (REVISADA) ====================
+
 # Mapeamento de categorias de Forex para Grupos de Moeda Base (para manter a estrutura do original)
+# Chaves são as bases das moedas no nome (e.g., 'Euro', 'US Dollar')
 FOREX_GROUPS_MAPPING = {
-    'US Dollar': 'Dólar Americano', 'Euro': 'Euro', 'British Pound': 'Libra Esterlina', 'Japanese Yen': 'Iene Japonês',
-    'Australian Dollar': 'Dólar Australiano', 'New Zealand Dollar': 'Dólar Neozelandês', 'Canadian Dollar': 'Dólar Canadense', 
-    'Swiss Franc': 'Franco Suíço', 'Brazilian Real': 'Real Brasileiro', 'Chinese Yuan': 'Yuan Chinês'
+    'US Dollar': 'Dólar Americano', 
+    'Euro': 'Euro', 
+    'British Pound': 'Libra Esterlina', 
+    'Japanese Yen': 'Iene Japonês',
+    'Australian Dollar': 'Dólar Australiano', 
+    'New Zealand Dollar': 'Dólar Neozelandês', 
+    'Canadian Dollar': 'Dólar Canadense', 
+    'Swiss Franc': 'Franco Suíço',
+    'Brazilian Real': 'Real Brasileiro', 
+    'Chinese Yuan': 'Yuan Chinês'
 }
 
-# ==================== FUNÇÕES DE SCRAPING ====================
+
+def agrupar_forex(data):
+    """Agrupa pares Forex estritamente pela moeda base no nome, como no código original."""
+    grupos = {v: [] for v in FOREX_GROUPS_MAPPING.values()}
+    
+    # Ordem de preferência (para evitar mistura de EUR/USD e USD/JPY, por exemplo)
+    # USD é a base em USD/XXX. EUR é a base em EUR/XXX.
+    ordem_bases = ['Euro', 'British Pound', 'Australian Dollar', 'New Zealand Dollar', 'US Dollar', 
+                   'Canadian Dollar', 'Swiss Franc', 'Japanese Yen', 'Brazilian Real', 'Chinese Yuan']
+
+    for item in data:
+        name = item['Name']
+        # Tenta encontrar a primeira moeda no nome (a moeda BASE, que define o grupo)
+        for base_prefix in ordem_bases:
+            if name.startswith(base_prefix):
+                group_name = FOREX_GROUPS_MAPPING[base_prefix]
+                grupos[group_name].append(item)
+                break
+            
+    # Remove grupos vazios e retorna
+    return {k: v for k, v in grupos.items() if v}
+
+# ==================== FUNÇÕES DE SCRAPING (INALTERADAS) ====================
 
 def get_single_forex(symbol, name):
     url = f'https://br.investing.com/currencies/{symbol}-historical-data'
@@ -172,7 +204,7 @@ def get_single_non_forex(category, symbol, name):
     except Exception as e:
         return {'Symbol': name.upper(), 'Name': name, 'Last Price': 'Erro', '1d Change (%)': 0.0, 'Category': category}
 
-# ==================== FUNÇÃO TURBO (FETCH GERAL) ====================
+# ==================== FUNÇÃO TURBO (FETCH GERAL - INALTERADA) ====================
 @st.cache_data(ttl=55)
 def fetch_all_turbo():
     results = []
@@ -203,33 +235,20 @@ def fetch_all_turbo():
         
     return grouped_results
 
-# ==================== FUNÇÕES DE AGRUPAMENTO E GRÁFICO ====================
-
-def agrupar_forex(data):
-    grupos = {v: [] for v in FOREX_GROUPS_MAPPING.values()}
-    for item in data:
-        name = item['Name']
-        for prefix, group_name in FOREX_GROUPS_MAPPING.items():
-            if name.startswith(prefix):
-                grupos[group_name].append(item)
-                break
-    return {k: v for k, v in grupos.items() if v}
-
+# ==================== FUNÇÃO GRÁFICO (INALTERADA) ====================
 def grafico_forca(data):
-    # Filtra apenas os dados de Forex, se a lista não estiver vazia
     if not data:
         return None
         
     df = pd.DataFrame(data)
     df['Base'] = df['Symbol'].str.split('/').str[0]
     
-    # Calcular Força Relativa: a média da variação percentual para cada moeda base
     media = df.groupby('Base')['1d Change (%)'].mean().round(2).sort_values(ascending=False)
     
     fig = px.bar(media.reset_index(), x='Base', y='1d Change (%)',
                  title='📈 Força Relativa Média das Moedas (1 dia)',
                  color='1d Change (%)',
-                 color_continuous_scale=['red', 'orange', 'lightgray', 'lightgreen', 'green'], # Ajustado a escala de cores
+                 color_continuous_scale=['red', 'orange', 'lightgray', 'lightgreen', 'green'], 
                  text='1d Change (%)')
                  
     fig.update_traces(texttemplate='%{text}%', textposition='outside')
@@ -237,7 +256,7 @@ def grafico_forca(data):
     fig.update_layout(height=500, showlegend=False, xaxis={'categoryorder': 'total descending'})
     return fig
 
-# ==================== LOOP PRINCIPAL ====================
+# ==================== LOOP PRINCIPAL (AJUSTADO PARA A NOVA FUNÇÃO DE AGRUPAMENTO) ====================
 placeholder = st.empty()
 
 while True:
@@ -266,13 +285,18 @@ while True:
             st.markdown("---")
 
 
-        # 2. EXIBE FOREX SEPARADO POR MOEDA BASE
+        # 2. EXIBE FOREX SEPARADO POR MOEDA BASE (AGORA COM AGRUPAMENTO MAIS PRECISO)
         if 'Forex' in dados_agrupados:
             st.header("💱 Forex - Pares de Moedas")
-            forex_grupos = agrupar_forex(dados_agrupados['Forex'])
+            # CHAMADA DA FUNÇÃO DE AGRUPAMENTO CORRIGIDA
+            forex_grupos = agrupar_forex(dados_agrupados['Forex']) 
             forex_cols = st.columns(4)
             
-            for idx, (titulo, lista) in enumerate(forex_grupos.items()):
+            # Garante que a ordem das colunas de Forex seja a mesma do FOREX_GROUPS_MAPPING
+            ordered_groups = [g for g in FOREX_GROUPS_MAPPING.values() if g in forex_grupos]
+            
+            for idx, titulo in enumerate(ordered_groups):
+                lista = forex_grupos[titulo]
                 with forex_cols[idx % 4]:
                     df = pd.DataFrame(lista)[['Symbol', 'Last Price', '1d Change (%)']]
                     df.set_index('Symbol', inplace=True)
@@ -280,7 +304,7 @@ while True:
                     st.dataframe(estilizar_dataframe(df), width="stretch")
             st.markdown("---")
 
-        # 3. EXIBE ÍNDICES, COMMODITIES E CRYPTO (um título por categoria)
+        # 3. EXIBE ÍNDICES, COMMODITIES E CRYPTO (Inalterado)
         st.header("🌎 Outros Ativos (Índices, Commodities e Crypto)")
         ordenacao = ['USA', 'Asia/Pacifico', 'Europa', 'Commodities', 'Crypto']
         
@@ -288,17 +312,14 @@ while True:
             if category in dados_agrupados:
                 current_data = dados_agrupados[category]
                 
-                # Exibe o título da categoria
                 st.subheader(category)
 
-                # Cria o DataFrame e estiliza
                 df = pd.DataFrame(current_data)[['Symbol', 'Last Price', '1d Change (%)']]
                 df.set_index('Symbol', inplace=True)
                 
-                # Usa uma única tabela larga para melhor visualização
                 st.dataframe(estilizar_dataframe(df), use_container_width=True)
                 
-                st.markdown("***") # Separador leve entre categorias
+                st.markdown("***")
         
 
         # Download CSV - Inclui todos os dados
