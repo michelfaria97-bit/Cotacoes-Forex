@@ -49,7 +49,7 @@ assets = {
     },
     'USA': {'us-spx-500-futures': 'S&P 500', 'nq-100-futures': 'Nasdaq 100', 'us-30-futures': 'US30', 
             'smallcap-2000-futures': 'Russel 2000', 'volatility-s-p-500': 'VIX', 'usdollar': 'DXY'},
-    'Asia/Pacifico': {'hong-kong-40-futures': 'Hang Seng', 'shanghai-composite': 'SSE Composite', 'japan-225-futures': 'Nikkei 225'},
+    'Asia/Pacifico': {'hong-kong-40-futures': 'Hang Seng', 'shanghai-composite': 'SSE Composite', 'japan-225-futures': 'Nikkei 225', 'ftse-china-25': 'FTSE China'},
     'Europa': {'uk-100-futures': 'FTSE 100', 'germany-30-futures': 'DAX', 'france-40-futures': 'CAC 40', 
                'eu-stocks-50-futures': 'STOXX 50', 'spain-35-futures': 'IBEX 35'},
     'Commodities': {'gold': 'Gold', 'silver': 'Silver', 'platinum': 'Platinum', 'copper': 'Copper', 
@@ -224,3 +224,4 @@ while True:
         st.download_button("Baixar todos os dados (CSV)", csv, f"cotacoes_{datetime.now():%Y%m%d_%H%M}.csv", "text/csv")
 
     time.sleep(60)
+
