@@ -1,4 +1,4 @@
-# app.py — VERSÃO FINAL 100% FUNCIONAL (BRL e CNY ao lado, tudo alinhado)
+# app.py — VERSÃO FINAL PERFEITA (COM GRÁFICO + BRL/CN AO LADO + CRYPTO CORRIGIDO)
 import streamlit as st
 import requests
 import re
@@ -6,6 +6,7 @@ import time
 from datetime import datetime
 from bs4 import BeautifulSoup
 import pandas as pd
+import plotly.express as px
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 st.set_page_config(page_title="Cotações ao Vivo", layout="wide", initial_sidebar_state="collapsed", page_icon="Chart")
@@ -35,15 +36,16 @@ assets = {
         'nzd-gbp': 'New Zealand Dollar/British Pound', 'cad-aud': 'Canadian Dollar/Australian Dollar', 'usd-aud': 'US Dollar/Australian Dollar',
         'jpy-eur': 'Japanese Yen/Euro', 'chf-aud': 'Swiss Franc/Australian Dollar', 'chf-eur': 'Swiss Franc/Euro',
         'usd-nzd': 'US Dollar/New Zealand Dollar', 'jpy-usd': 'Japanese Yen/US Dollar', 'jpy-gbp': 'Japanese Yen/British Pound',
-        'jpy-cad': 'Canadian Dollar/Japanese Yen', 'jpy-chf': 'Swiss Franc/Japanese Yen', 'jpy-nzd': 'New Zealand Dollar/Japanese Yen',
-        'cad-usd': 'US Dollar/Canadian Dollar', 'cad-jpy': 'Canadian Dollar/Japanese Yen', 'cad-gbp': 'British Pound/Canadian Dollar',
-        'cad-chf': 'Swiss Franc/Canadian Dollar', 'cad-nzd': 'New Zealand Dollar/Canadian Dollar', 'chf-usd': 'US Dollar/Swiss Franc',
-        'chf-jpy': 'Swiss Franc/Japanese Yen', 'chf-gbp': 'British Pound/Swiss Franc', 'chf-cad': 'Canadian Dollar/Swiss Franc',
-        'chf-nzd': 'New Zealand Dollar/Swiss Franc', 'cad-eur': 'Euro/Canadian Dollar', 'usd-eur': 'Euro/US Dollar', 'usd-gbp': 'British Pound/US Dollar',
-        'jpy-aud': 'Australian Dollar/Japanese Yen',
-        'brl-usd': 'US Dollar/Brazilian Real', 'brl-jpy': 'Japanese Yen/Brazilian Real', 'brl-eur': 'Euro/Brazilian Real',
-        'brl-gbp': 'British Pound/Brazilian Real', 'brl-cad': 'Brazilian Real/Canadian Dollar',
-        'cny-usd': 'US Dollar/Chinese Yuan', 'cny-jpy': 'Japanese Yen/Chinese Yuan', 'cny-eur': 'Euro/Chinese Yuan'
+        'jpy-cad': 'Japanese Yen/Canadian Dollar', 'jpy-chf': 'Japanese Yen/Swiss Franc', 'jpy-nzd': 'Japanese Yen/New Zealand Dollar',
+        'cad-usd': 'Canadian Dollar/US Dollar', 'cad-jpy': 'Canadian Dollar/Japanese Yen', 'cad-gbp': 'Canadian Dollar/British Pound',
+        'cad-chf': 'Canadian Dollar/Swiss Franc', 'cad-nzd': 'Canadian Dollar/New Zealand Dollar', 'chf-usd': 'Swiss Franc/US Dollar',
+        'chf-jpy': 'Swiss Franc/Japanese Yen', 'chf-gbp': 'Swiss Franc/British Pound', 'chf-cad': 'Swiss Franc/Canadian Dollar',
+        'chf-nzd': 'Swiss Franc/New Zealand Dollar', 'cad-eur': 'Canadian Dollar/Euro', 'usd-eur': 'US Dollar/Euro', 'usd-gbp': 'US Dollar/British Pound',
+        'jpy-aud': 'Japanese Yen/Australian Dollar', 'brl-cad': 'Brazilian Real/Canadian Dollar', 'cny-usd': 'Chinese Yuan/US Dollar',
+        'cny-nzd': 'Chinese Yuan/New Zealand Dollar', 'cny-jpy': 'Chinese Yuan/Japanese Yen', 'cny-gbp': 'Chinese Yuan/British Pound',
+        'cny-chf': 'Chinese Yuan/Swiss Franc', 'cny-aud': 'Chinese Yuan/Australian Dollar', 'cny-eur': 'Chinese Yuan/Euro',
+        'brl-usd': 'Brazilian Real/US Dollar', 'brl-jpy': 'Brazilian Real/Japanese Yen', 'brl-gbp': 'Brazilian Real/British Pound', 'brl-nzd': 'Brazilian Real/New Zealand Dollar', 
+        'brl-aud': 'Brazilian Real/Australian Dollar', 'brl-eur': 'Brazilian Real/Euro'
     },
     'USA': {'us-spx-500-futures': 'S&P 500', 'nq-100-futures': 'Nasdaq 100', 'us-30-futures': 'US30', 
             'smallcap-2000-futures': 'Russel 2000', 'volatility-s-p-500': 'VIX', 'usdollar': 'DXY'},
@@ -55,7 +57,7 @@ assets = {
     'Crypto': {'btc-usd': 'Bitcoin', 'eth-usd': 'Ethereum'}
 }
 
-# ==================== FUNÇÕES DE SCRAPING ====================
+# ==================== FUNÇÕES ====================
 def clean_price(p):
     if not p or p in ['N/D', '-']: return 'N/D'
     p = p.replace(',', '.')
@@ -83,12 +85,14 @@ def get_single_forex(symbol, _):
 def get_single_non_forex(category, symbol, name):
     if symbol == 'usdollar':
         url = 'https://br.investing.com/indices/usdollar'
-    elif category == 'Crypto':
-        url = f'https://br.investing.com/crypto/{symbol.split("-")[0]}'
+    elif symbol == 'btc-usd':
+        url = 'https://br.investing.com/indices/investing.com-btc-usd'
+    elif symbol == 'eth-usd':
+        url = 'https://br.investing.com/indices/investing.com-eth-usd'
+    elif category in ['USA', 'Asia/Pacifico', 'Europa']:
+        url = f'https://br.investing.com/indices/{symbol}'
     else:
-        # Correção da URL: usa o tipo correto (indices ou commodities)
-        tipo = 'indices' if category in ['USA', 'Asia/Pacifico', 'Europa'] else 'commodities'
-        url = f'https://br.investing.com/{tipo}/{symbol}'
+        url = f'https://br.investing.com/commodities/{symbol}'
     headers = {'User-Agent': 'Mozilla/5.0'}
     try:
         r = requests.get(url, headers=headers, timeout=15)
@@ -102,7 +106,6 @@ def get_single_non_forex(category, symbol, name):
     except:
         return {'Symbol': name, 'Last Price': 'Erro', '1d Change (%)': 0.0}
 
-# ==================== AGRUPAMENTO E ESTILO ====================
 def agrupar_forex(data):
     grupos = {
         'Dólar Americano': [], 'Euro': [], 'Libra Esterlina': [], 'Iene Japonês': [],
@@ -121,36 +124,41 @@ def agrupar_forex(data):
             grupos[grupo].append(item)
     return {k: v for k, v in grupos.items() if v}
 
+def grafico_forca(data):
+    forex = [i for i in data if '/' in i['Symbol']]
+    if not forex: return None
+    df = pd.DataFrame(forex)
+    df['1d Change (%)'] = pd.to_numeric(df['1d Change (%)'], errors='coerce')
+    df['Base'] = df['Symbol'].str.split('/').str[0]
+    media = df.groupby('Base')['1d Change (%)'].mean().round(2).sort_values(ascending=False)
+    fig = px.bar(media.reset_index(), x='Base', y='1d Change (%)', color='1d Change (%)',
+                 color_continuous_scale=['red','orange','lightgray','lightgreen','green'],
+                 text='1d Change (%)', title='Força Relativa Média das Moedas (1 dia)')
+    fig.update_traces(texttemplate='%{text}%', textposition='outside')
+    fig.add_hline(y=0, line_color='white', line_width=2)
+    fig.update_layout(height=500, showlegend=False, xaxis={'categoryorder': 'total descending'})
+    return fig
+
 def estilizar(df):
     return df.style.format({'1d Change (%)': '{:.2f}%'}) \
         .map(lambda x: f"color: {'green' if x>0 else 'red' if x<0 else 'gray'}; font-weight: bold", subset=['1d Change (%)'])
 
-# ==================== BUSCA ====================
 @st.cache_data(ttl=55)
 def fetch_all():
     results = []
-    with ThreadPoolExecutor(max_workers=35) as executor:
+    with ThreadPoolExecutor(max_workers=40) as executor:
         futures = []
-        # Forex
         for symbol, name in assets['Forex'].items():
             futures.append(executor.submit(get_single_forex, symbol, name))
-        # Outros ativos
         for cat in ['USA', 'Asia/Pacifico', 'Europa', 'Commodities', 'Crypto']:
             for symbol, name in assets[cat].items():
                 futures.append(executor.submit(get_single_non_forex, cat, symbol, name))
-        for future in as_completed(futures):
+        for f in as_completed(futures):
             try:
-                results.append(future.result())
-            except:
-                pass
-    # Remove duplicatas
+                results.append(f.result())
+            except: pass
     seen = set()
-    unique = []
-    for r in results:
-        sym = r['Symbol']
-        if sym not in seen:
-            seen.add(sym)
-            unique.append(r)
+    unique = [r for r in results if r['Symbol'] not in seen and not seen.add(r['Symbol'])]
     return unique
 
 # ==================== LOOP PRINCIPAL ====================
@@ -160,22 +168,24 @@ while True:
     with placeholder.container():
         dados = fetch_all()
 
-        forex_data = [x for x in dados if '/' in x['Symbol']]
-        outros_data = [x for x in dados if '/' not in x['Symbol']]
-
         st.markdown(f"**Atualizado:** {datetime.now():%d/%m/%Y %H:%M:%S} • Tempo: {time.time()-inicio:.1f}s")
         st.markdown("---")
 
+        # GRÁFICO DE FORÇA (MANTIDO!)
+        fig = grafico_forca(dados)
+        if fig:
+            st.plotly_chart(fig, use_container_width=True)
+            st.markdown("---")
+
         # FOREX — 4 COLUNAS
         st.header("Forex - Pares de Moedas")
+        forex_data = [x for x in dados if '/' in x['Symbol']]
         grupos = agrupar_forex(forex_data)
         cols = st.columns(4)
 
-        ordem = [
-            'Dólar Americano', 'Euro', 'Libra Esterlina', 'Iene Japonês',
-            'Dólar Australiano', 'Dólar Neozelandês', 'Dólar Canadense',
-            'Franco Suíço', 'Real Brasileiro', 'Yuan Chinês'
-        ]
+        ordem = ['Dólar Americano', 'Euro', 'Libra Esterlina', 'Iene Japonês',
+                 'Dólar Australiano', 'Dólar Neozelandês', 'Dólar Canadense',
+                 'Franco Suíço', 'Real Brasileiro', 'Yuan Chinês']
 
         col_idx = 0
         for titulo in ordem:
@@ -188,15 +198,15 @@ while True:
 
         st.markdown("---")
 
-        # OUTROS ATIVOS — TAMBÉM EM 4 COLUNAS
+        # OUTROS ATIVOS — 4 COLUNAS
         st.header("Outros Ativos")
+        outros = [x for x in dados if '/' not in x['Symbol']]
         cols2 = st.columns(4)
         cat_map = {'USA': [], 'Asia/Pacifico': [], 'Europa': [], 'Commodities': [], 'Crypto': []}
-        for item in outros_data:
-            sym = item['Symbol']
+        for item in outros:
             for cat, itens in assets.items():
                 if cat == 'Forex': continue
-                if sym in itens.values():
+                if item['Symbol'] in itens.values():
                     cat_map[cat].append(item)
                     break
 
