@@ -1,4 +1,4 @@
-# app.py — VERSÃO COM ÍNDICES, COMMODITIES E CRYPTO (Sem Gráfico de Força)
+# app.py — VERSÃO FINAL COM GRÁFICO DE FORÇA RELATIVA + NOVAS COTAÇÕES
 
 import streamlit as st
 import requests
@@ -31,9 +31,8 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==================== TODOS OS ATIVOS ====================
-# A chave é o prefixo do URL do Investing.com (e.g., /currencies/, /indices/)
 assets = {
-    # PARES FOREX - (mantido o original para referência)
+    # PARES FOREX 
     'Forex': {
         'eur-usd': 'Euro/US Dollar', 'gbp-usd': 'British Pound/US Dollar', 'usd-jpy': 'US Dollar/Japanese Yen',
         'aud-usd': 'Australian Dollar/US Dollar', 'usd-cad': 'US Dollar/Canadian Dollar', 'usd-chf': 'US Dollar/Swiss Franc',
@@ -48,7 +47,7 @@ assets = {
         'nzd-gbp': 'New Zealand Dollar/British Pound', 'cad-aud': 'Canadian Dollar/Australian Dollar', 'usd-aud': 'US Dollar/Australian Dollar',
         'jpy-eur': 'Japanese Yen/Euro', 'chf-aud': 'Swiss Franc/Australian Dollar', 'chf-eur': 'Swiss Franc/Euro',
         'usd-nzd': 'US Dollar/New Zealand Dollar', 'jpy-usd': 'Japanese Yen/US Dollar', 'jpy-gbp': 'Japanese Yen/British Pound',
-        'jpy-cad': 'Japanese Yen/Canadian Dollar', 'jpy-chf': 'Swiss Franc/Japanese Yen', 'jpy-nzd': 'New Zealand Dollar/Japanese Yen',
+        'jpy-cad': 'Canadian Dollar/Japanese Yen', 'jpy-chf': 'Swiss Franc/Japanese Yen', 'jpy-nzd': 'New Zealand Dollar/Japanese Yen',
         'cad-usd': 'US Dollar/Canadian Dollar', 'cad-jpy': 'Canadian Dollar/Japanese Yen', 'cad-gbp': 'British Pound/Canadian Dollar',
         'cad-chf': 'Swiss Franc/Canadian Dollar', 'cad-nzd': 'New Zealand Dollar/Canadian Dollar', 'chf-usd': 'US Dollar/Swiss Franc',
         'chf-jpy': 'Swiss Franc/Japanese Yen', 'chf-gbp': 'British Pound/Swiss Franc', 'chf-cad': 'Canadian Dollar/Swiss Franc',
@@ -92,12 +91,18 @@ ASSET_TYPES = {
     'Asia/Pacifico': 'indices',
     'Europa': 'indices',
     'Commodities': 'commodities',
-    'Crypto': 'crypto' # A URL de Crypto é mais complexa, mas vamos tentar o /crypto/{symbol}
+    'Crypto': 'crypto'
+}
+
+# Mapeamento de categorias de Forex para Grupos de Moeda Base (para manter a estrutura do original)
+FOREX_GROUPS_MAPPING = {
+    'US Dollar': 'Dólar Americano', 'Euro': 'Euro', 'British Pound': 'Libra Esterlina', 'Japanese Yen': 'Iene Japonês',
+    'Australian Dollar': 'Dólar Australiano', 'New Zealand Dollar': 'Dólar Neozelandês', 'Canadian Dollar': 'Dólar Canadense', 
+    'Swiss Franc': 'Franco Suíço', 'Brazilian Real': 'Real Brasileiro', 'Chinese Yuan': 'Yuan Chinês'
 }
 
 # ==================== FUNÇÕES DE SCRAPING ====================
 
-# 1. Scraping para Forex (funcionalidade mantida/ajustada para ser mais robusta)
 def get_single_forex(symbol, name):
     url = f'https://br.investing.com/currencies/{symbol}-historical-data'
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
@@ -106,7 +111,6 @@ def get_single_forex(symbol, name):
         if r.status_code != 200:
              return {'Symbol': symbol.upper().replace('-','/'), 'Name': name, 'Last Price': 'N/D', '1d Change (%)': 0.0, 'Category': 'Forex'}
 
-        # Tenta extrair do cabeçalho da página (mais rápido e mais confiável para o preço atual)
         soup = BeautifulSoup(r.text, 'html.parser')
         price_elem = soup.find('div', {'data-test': 'instrument-price-last'})
         change_elem = soup.find('span', {'data-test': 'instrument-price-change-percent'})
@@ -114,9 +118,8 @@ def get_single_forex(symbol, name):
         price = price_elem.text.strip() if price_elem else 'N/D'
         change_text = change_elem.text.strip() if change_elem else '(0,00%)'
         
-        # Limpa o texto de preço/porcentagem (ex: "(-0,06%)" → -0.06)
-        price_clean = price.replace(',', '.').replace('.', '', price.count('.') - 1) # Mantém apenas um ponto decimal
-        
+        # Limpa o texto de preço/porcentagem
+        price_clean = price.replace(',', '.').replace('.', '', price.count('.') - 1)
         num = re.sub(r'[^\d,.-]', '', change_text).replace(',', '.')
         change_pct = round(float(num or 0), 2)
 
@@ -129,22 +132,14 @@ def get_single_forex(symbol, name):
         }
 
     except Exception as e:
-        # print(f"Erro em Forex {symbol}: {e}")
         return {'Symbol': symbol.upper().replace('-','/'), 'Name': name, 'Last Price': 'Erro', '1d Change (%)': 0.0, 'Category': 'Forex'}
 
-# 2. Nova função de Scraping para Índices, Commodities e Crypto
-# O Investing.com usa uma estrutura de URL mais simples para esses ativos
 def get_single_non_forex(category, symbol, name):
-    # Trata DXY e BTC/ETH separadamente devido a URLs ligeiramente diferentes
     if symbol == 'usdollar':
-        # DXY: https://br.investing.com/indices/usdollar?cid=1224074
         url = 'https://br.investing.com/indices/usdollar'
     elif category == 'Crypto':
-        # Crypto: https://br.investing.com/crypto/bitcoin/btc-usd?cid=1129220
-        # Tenta a URL mais simples, mas pode precisar de ajuste se falhar
         url = f'https://br.investing.com/{ASSET_TYPES[category]}/{symbol.split("-")[0].lower()}/{symbol}'
     else:
-        # Padrão para Índices/Commodities
         url = f'https://br.investing.com/{ASSET_TYPES[category]}/{symbol}'
 
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
@@ -153,7 +148,6 @@ def get_single_non_forex(category, symbol, name):
         if r.status_code != 200:
              return {'Symbol': name.upper(), 'Name': name, 'Last Price': 'N/D', '1d Change (%)': 0.0, 'Category': category}
         
-        # Tenta extrair do cabeçalho da página (mais rápido e mais confiável para o preço atual)
         soup = BeautifulSoup(r.text, 'html.parser')
         price_elem = soup.find('div', {'data-test': 'instrument-price-last'})
         change_elem = soup.find('span', {'data-test': 'instrument-price-change-percent'})
@@ -161,13 +155,10 @@ def get_single_non_forex(category, symbol, name):
         price = price_elem.text.strip() if price_elem else 'N/D'
         change_text = change_elem.text.strip() if change_elem else '(0,00%)'
         
-        # Limpa o texto de preço/porcentagem (ex: "(-0,06%)" → -0.06)
         price_clean = price.replace(',', '.').replace('.', '', price.count('.') - 1)
-        
         num = re.sub(r'[^\d,.-]', '', change_text).replace(',', '.')
         change_pct = round(float(num or 0), 2)
 
-        # Ajuste para Symbol de ativos que não são pares (e.g. S&P 500 ao invés de us-spx-500-futures)
         display_symbol = name if category != 'Forex' else symbol.upper().replace('-', '/')
 
         return {
@@ -179,9 +170,7 @@ def get_single_non_forex(category, symbol, name):
         }
 
     except Exception as e:
-        # print(f"Erro em {category} {symbol}: {e}")
         return {'Symbol': name.upper(), 'Name': name, 'Last Price': 'Erro', '1d Change (%)': 0.0, 'Category': category}
-
 
 # ==================== FUNÇÃO TURBO (FETCH GERAL) ====================
 @st.cache_data(ttl=55)
@@ -201,7 +190,6 @@ def fetch_all_turbo():
                 future = executor.submit(get_single_non_forex, category, symbol, name)
                 all_futures[future] = f"{category}:{symbol}"
 
-        # Coleta os resultados
         for future in as_completed(all_futures):
             results.append(future.result())
             
@@ -215,15 +203,7 @@ def fetch_all_turbo():
         
     return grouped_results
 
-# ==================== LOOP PRINCIPAL — VERSÃO 100% ESTÁVEL ====================
-placeholder = st.empty()
-
-# Mapeamento de categorias de Forex para Grupos de Moeda Base (para manter a estrutura do original)
-FOREX_GROUPS_MAPPING = {
-    'US Dollar': 'Dólar Americano', 'Euro': 'Euro', 'British Pound': 'Libra Esterlina', 'Japanese Yen': 'Iene Japonês',
-    'Australian Dollar': 'Dólar Australiano', 'New Zealand Dollar': 'Dólar Neozelandês', 'Canadian Dollar': 'Dólar Canadense', 
-    'Swiss Franc': 'Franco Suíço', 'Brazilian Real': 'Real Brasileiro', 'Chinese Yuan': 'Yuan Chinês'
-}
+# ==================== FUNÇÕES DE AGRUPAMENTO E GRÁFICO ====================
 
 def agrupar_forex(data):
     grupos = {v: [] for v in FOREX_GROUPS_MAPPING.values()}
@@ -235,6 +215,30 @@ def agrupar_forex(data):
                 break
     return {k: v for k, v in grupos.items() if v}
 
+def grafico_forca(data):
+    # Filtra apenas os dados de Forex, se a lista não estiver vazia
+    if not data:
+        return None
+        
+    df = pd.DataFrame(data)
+    df['Base'] = df['Symbol'].str.split('/').str[0]
+    
+    # Calcular Força Relativa: a média da variação percentual para cada moeda base
+    media = df.groupby('Base')['1d Change (%)'].mean().round(2).sort_values(ascending=False)
+    
+    fig = px.bar(media.reset_index(), x='Base', y='1d Change (%)',
+                 title='📈 Força Relativa Média das Moedas (1 dia)',
+                 color='1d Change (%)',
+                 color_continuous_scale=['red', 'orange', 'lightgray', 'lightgreen', 'green'], # Ajustado a escala de cores
+                 text='1d Change (%)')
+                 
+    fig.update_traces(texttemplate='%{text}%', textposition='outside')
+    fig.add_hline(y=0, line_color='white', line_width=2)
+    fig.update_layout(height=500, showlegend=False, xaxis={'categoryorder': 'total descending'})
+    return fig
+
+# ==================== LOOP PRINCIPAL ====================
+placeholder = st.empty()
 
 while True:
     start_time = time.time()
@@ -245,10 +249,6 @@ while True:
 
         st.markdown(f"**Última Atualização:** {datetime.now().strftime('%d/%m/%Y %H:%M:%S')} • Carregado em **{tempo}s**")
         st.markdown("---")
-
-        # Configura as colunas para o display
-        cols = st.columns(4)
-        col_idx = 0
         
         # Função de estilização para o dataframe
         def estilizar_dataframe(df):
@@ -260,11 +260,18 @@ while True:
                              .format({'1d Change (%)': '{:.2f}%'})
              return styled
 
-        # 1. EXIBE FOREX SEPARADO POR MOEDA BASE (mantendo a lógica do original)
+        # 1. EXIBE GRÁFICO DE FORÇA RELATIVA (SOMENTE FOREX)
         if 'Forex' in dados_agrupados:
+            st.plotly_chart(grafico_forca(dados_agrupados['Forex']), use_container_width=True, key=f"plotly_force_{int(time.time())}")
+            st.markdown("---")
+
+
+        # 2. EXIBE FOREX SEPARADO POR MOEDA BASE
+        if 'Forex' in dados_agrupados:
+            st.header("💱 Forex - Pares de Moedas")
             forex_grupos = agrupar_forex(dados_agrupados['Forex'])
-            st.header("💱 Forex")
             forex_cols = st.columns(4)
+            
             for idx, (titulo, lista) in enumerate(forex_grupos.items()):
                 with forex_cols[idx % 4]:
                     df = pd.DataFrame(lista)[['Symbol', 'Last Price', '1d Change (%)']]
@@ -273,14 +280,12 @@ while True:
                     st.dataframe(estilizar_dataframe(df), width="stretch")
             st.markdown("---")
 
-        # 2. EXIBE ÍNDICES, COMMODITIES E CRYPTO (um título por categoria)
-        st.header("🌎 Índices, Commodities e Crypto")
-        # Define a ordem de exibição das categorias (fora de Forex)
+        # 3. EXIBE ÍNDICES, COMMODITIES E CRYPTO (um título por categoria)
+        st.header("🌎 Outros Ativos (Índices, Commodities e Crypto)")
         ordenacao = ['USA', 'Asia/Pacifico', 'Europa', 'Commodities', 'Crypto']
         
         for category in ordenacao:
             if category in dados_agrupados:
-                # Usa duas colunas por seção para as menores, ou 4 para a maior
                 current_data = dados_agrupados[category]
                 
                 # Exibe o título da categoria
@@ -290,13 +295,8 @@ while True:
                 df = pd.DataFrame(current_data)[['Symbol', 'Last Price', '1d Change (%)']]
                 df.set_index('Symbol', inplace=True)
                 
-                # Usa colunas para melhor layout, especialmente para as menores
-                if len(current_data) <= 4:
-                     st.dataframe(estilizar_dataframe(df), use_container_width=True)
-                else:
-                    # Dividindo em 4 colunas para as maiores (como Índices EUA)
-                    # Cria um "mini-tabela" para cada item se forem muitos, ou usa uma única tabela larga
-                    st.dataframe(estilizar_dataframe(df), use_container_width=True)
+                # Usa uma única tabela larga para melhor visualização
+                st.dataframe(estilizar_dataframe(df), use_container_width=True)
                 
                 st.markdown("***") # Separador leve entre categorias
         
