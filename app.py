@@ -86,9 +86,9 @@ def get_single_non_forex(category, symbol, name):
     if symbol == 'usdollar':
         url = 'https://br.investing.com/indices/usdollar'
     elif symbol == 'btc-usd':
-        url = 'https://br.investing.com/indices/investing.com-btc-usd'
+        url = 'https://br.investing.com/crypto/bitcoin/btc-usd?cid=1035793'
     elif symbol == 'eth-usd':
-        url = 'https://br.investing.com/indices/investing.com-eth-usd'
+        url = 'https://br.investing.com/crypto/ethereum/eth-usd'
     elif category in ['USA', 'Asia/Pacifico', 'Europa']:
         url = f'https://br.investing.com/indices/{symbol}'
     else:
@@ -224,4 +224,5 @@ while True:
         st.download_button("Baixar todos os dados (CSV)", csv, f"cotacoes_{datetime.now():%Y%m%d_%H%M}.csv", "text/csv")
 
     time.sleep(60)
+
 
