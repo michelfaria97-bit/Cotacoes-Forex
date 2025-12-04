@@ -167,7 +167,6 @@ while True:
     inicio = time.time()
     with placeholder.container():
         dados = fetch_all()
-        tempo = round(time.time() - start_time, -3)
         
         st.markdown(f"**Atualização:** {datetime.now().strftime('%d/%m/%Y %H:%M:%S')} • Carregado em **{tempo}s**")
         st.markdown("---")
@@ -225,6 +224,7 @@ while True:
         st.download_button("Baixar todos os dados (CSV)", csv, f"cotacoes_{datetime.now():%Y%m%d_%H%M}.csv", "text/csv")
 
     time.sleep(60)
+
 
 
 
