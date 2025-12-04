@@ -1,4 +1,4 @@
-# app.py — VERSÃO FINAL 100% FUNCIONAL E PERFEITA (BRL E CNY AO LADO)
+# app.py — VERSÃO FINAL 100% FUNCIONAL (BRL e CNY ao lado, tudo alinhado)
 import streamlit as st
 import requests
 import re
@@ -6,7 +6,6 @@ import time
 from datetime import datetime
 from bs4 import BeautifulSoup
 import pandas as pd
-import plotly.express as px
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 st.set_page_config(page_title="Cotações ao Vivo", layout="wide", initial_sidebar_state="collapsed", page_icon="Chart")
@@ -56,7 +55,7 @@ assets = {
     'Crypto': {'btc-usd': 'Bitcoin', 'eth-usd': 'Ethereum'}
 }
 
-# ==================== FUNÇÕES ====================
+# ==================== FUNÇÕES DE SCRAPING ====================
 def clean_price(p):
     if not p or p in ['N/D', '-']: return 'N/D'
     p = p.replace(',', '.')
@@ -72,10 +71,10 @@ def get_single_forex(symbol, _):
     try:
         r = requests.get(url, headers=headers, timeout=15)
         soup = BeautifulSoup(r.text, 'html.parser')
-        price = soup.find('div', {'data-test': 'instrument-price-last'})
-        change = soup.find('span', {'data-test': 'instrument-price-change-percent'})
-        price = price.text.strip() if price else 'N/D'
-        change_text = change.text.strip() if change else '0%'
+        price_elem = soup.find('div', {'data-test': 'instrument-price-last'})
+        change_elem = soup.find('span', {'data-test': 'instrument-price-change-percent'})
+        price = price_elem.text.strip() if price_elem else 'N/D'
+        change_text = change_elem.text.strip() if change_elem else '0%'
         num = re.sub(r'[^\d.-]', '', change_text.replace(',', '.'))
         return {'Symbol': symbol.upper().replace('-','/'), 'Last Price': clean_price(price), '1d Change (%)': round(float(num or 0), 2)}
     except:
@@ -87,21 +86,23 @@ def get_single_non_forex(category, symbol, name):
     elif category == 'Crypto':
         url = f'https://br.investing.com/crypto/{symbol.split("-")[0]}'
     else:
-        url = f'https://br.investing.com/{{"indices": "indices", "commodities": "commodities"}.get(ASSET_TYPES.get(category, ""), ASSET_TYPES[category])}/{symbol}'
+        # Correção da URL: usa o tipo correto (indices ou commodities)
+        tipo = 'indices' if category in ['USA', 'Asia/Pacifico', 'Europa'] else 'commodities'
+        url = f'https://br.investing.com/{tipo}/{symbol}'
     headers = {'User-Agent': 'Mozilla/5.0'}
     try:
         r = requests.get(url, headers=headers, timeout=15)
         soup = BeautifulSoup(r.text, 'html.parser')
-        price = soup.find('div', {'data-test': 'instrument-price-last'})
-        change = soup.find('span', {'data-test': 'instrument-price-change-percent'})
-        price = price.text.strip() if price else 'N/D'
-        change_text = change.text.strip() if change else '0%'
+        price_elem = soup.find('div', {'data-test': 'instrument-price-last'})
+        change_elem = soup.find('span', {'data-test': 'instrument-price-change-percent'})
+        price = price_elem.text.strip() if price_elem else 'N/D'
+        change_text = change_elem.text.strip() if change_elem else '0%'
         num = re.sub(r'[^\d.-]', '', change_text.replace(',', '.'))
-        return {'Symbol': name, 'Last Price': clean_price(price), '1d Change (%)': round(float(num or 0), 2), 'Category': category}
+        return {'Symbol': name, 'Last Price': clean_price(price), '1d Change (%)': round(float(num or 0), 2)}
     except:
-        return {'Symbol': name, 'Last Price': 'Erro', '1d Change (%)': 0.0, 'Category': category}
+        return {'Symbol': name, 'Last Price': 'Erro', '1d Change (%)': 0.0}
 
-# ==================== AGRUPAMENTO ====================
+# ==================== AGRUPAMENTO E ESTILO ====================
 def agrupar_forex(data):
     grupos = {
         'Dólar Americano': [], 'Euro': [], 'Libra Esterlina': [], 'Iene Japonês': [],
@@ -124,26 +125,31 @@ def estilizar(df):
     return df.style.format({'1d Change (%)': '{:.2f}%'}) \
         .map(lambda x: f"color: {'green' if x>0 else 'red' if x<0 else 'gray'}; font-weight: bold", subset=['1d Change (%)'])
 
+# ==================== BUSCA ====================
 @st.cache_data(ttl=55)
 def fetch_all():
     results = []
     with ThreadPoolExecutor(max_workers=35) as executor:
+        futures = []
         # Forex
         for symbol, name in assets['Forex'].items():
-            results.append(executor.submit(get_single_forex, symbol, name))
-        # Outros
-        for cat, itens in assets.items():
-            if cat == 'Forex': continue
-            for symbol, name in itens.items():
-                results.append(executor.submit(get_single_non_forex, cat, symbol, name))
-        for future in as_completed(results):
-            results.append(future.result())
-    # Remove duplicatas que o as_completed pode gerar
+            futures.append(executor.submit(get_single_forex, symbol, name))
+        # Outros ativos
+        for cat in ['USA', 'Asia/Pacifico', 'Europa', 'Commodities', 'Crypto']:
+            for symbol, name in assets[cat].items():
+                futures.append(executor.submit(get_single_non_forex, cat, symbol, name))
+        for future in as_completed(futures):
+            try:
+                results.append(future.result())
+            except:
+                pass
+    # Remove duplicatas
     seen = set()
     unique = []
     for r in results:
-        if r and r['Symbol'] not in seen:
-            seen.add(r['Symbol'])
+        sym = r['Symbol']
+        if sym not in seen:
+            seen.add(sym)
             unique.append(r)
     return unique
 
@@ -160,19 +166,19 @@ while True:
         st.markdown(f"**Atualizado:** {datetime.now():%d/%m/%Y %H:%M:%S} • Tempo: {time.time()-inicio:.1f}s")
         st.markdown("---")
 
-        # === FOREX - 4 COLUNAS FIXAS ===
+        # FOREX — 4 COLUNAS
         st.header("Forex - Pares de Moedas")
         grupos = agrupar_forex(forex_data)
         cols = st.columns(4)
 
-        ordem_grupos = [
+        ordem = [
             'Dólar Americano', 'Euro', 'Libra Esterlina', 'Iene Japonês',
             'Dólar Australiano', 'Dólar Neozelandês', 'Dólar Canadense',
             'Franco Suíço', 'Real Brasileiro', 'Yuan Chinês'
         ]
 
         col_idx = 0
-        for titulo in ordem_grupos:
+        for titulo in ordem:
             if titulo in grupos and grupos[titulo]:
                 with cols[col_idx % 4]:
                     df = pd.DataFrame(grupos[titulo])[['Symbol', 'Last Price', '1d Change (%)']].set_index('Symbol')
@@ -182,31 +188,29 @@ while True:
 
         st.markdown("---")
 
-        # === OUTROS ATIVOS - TAMBÉM EM 4 COLUNAS ===
+        # OUTROS ATIVOS — TAMBÉM EM 4 COLUNAS
         st.header("Outros Ativos")
         cols2 = st.columns(4)
-
-        categorias = ['USA', 'Asia/Pacifico', 'Europa', 'Commodities', 'Crypto']
-        cat_data = {cat: [] for cat in categorias}
-
+        cat_map = {'USA': [], 'Asia/Pacifico': [], 'Europa': [], 'Commodities': [], 'Crypto': []}
         for item in outros_data:
             sym = item['Symbol']
-            for cat in categorias:
-                if sym in assets.get(cat, {}).values():
-                    cat_data[cat].append(item)
+            for cat, itens in assets.items():
+                if cat == 'Forex': continue
+                if sym in itens.values():
+                    cat_map[cat].append(item)
                     break
 
         col_idx = 0
-        for cat in categorias:
-            if cat_data[cat]:
+        for cat in ['USA', 'Asia/Pacifico', 'Europa', 'Commodities', 'Crypto']:
+            if cat_map[cat]:
                 with cols2[col_idx % 4]:
-                    df = pd.DataFrame(cat_data[cat])[['Symbol', 'Last Price', '1d Change (%)']].set_index('Symbol')
+                    df = pd.DataFrame(cat_map[cat])[['Symbol', 'Last Price', '1d Change (%)']].set_index('Symbol')
                     st.subheader(cat.replace('/', ' / '))
                     st.dataframe(estilizar(df), use_container_width=True)
                 col_idx += 1
 
-        # Download CSV
+        # Download
         csv = pd.DataFrame(dados).to_csv(index=False, encoding='utf-8')
-        st.download_button("Baixar CSV", csv, f"cotacoes_{datetime.now():%Y%m%d_%H%M}.csv", "text/csv")
+        st.download_button("Baixar todos os dados (CSV)", csv, f"cotacoes_{datetime.now():%Y%m%d_%H%M}.csv", "text/csv")
 
     time.sleep(60)
