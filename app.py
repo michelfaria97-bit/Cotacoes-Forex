@@ -3,7 +3,7 @@ import streamlit as st
 import requests
 import re
 import time
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from bs4 import BeautifulSoup
 import pandas as pd
 import plotly.express as px
@@ -225,6 +225,7 @@ while True:
         st.download_button("Baixar todos os dados (CSV)", csv, f"cotacoes_{datetime.now():%Y%m%d_%H%M}.csv", "text/csv")
 
     time.sleep(60)
+
 
 
 
