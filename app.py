@@ -3,7 +3,7 @@ import streamlit as st
 import requests
 import re
 import time
-from datetime import datetime, timezone, timedelta
+from datetime import datetime
 from bs4 import BeautifulSoup
 import pandas as pd
 import plotly.express as px
@@ -168,7 +168,7 @@ while True:
     with placeholder.container():
         dados = fetch_all()
         
-        st.markdown(f"**Atualização:** {datetime.now().strftime('%d/%m/%Y %H:%M:%S')} • Carregado em **{tempo}s**")
+        st.markdown(f"**Atualizado:** {datetime.now():%d/%m/%Y %H:%M:%S} • Tempo: {time.time()-inicio:.1f}s")
         st.markdown("---")
 
         # GRÁFICO DE FORÇA (MANTIDO!)
@@ -224,6 +224,7 @@ while True:
         st.download_button("Baixar todos os dados (CSV)", csv, f"cotacoes_{datetime.now():%Y%m%d_%H%M}.csv", "text/csv")
 
     time.sleep(60)
+
 
 
 
