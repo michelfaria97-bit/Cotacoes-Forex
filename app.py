@@ -1,4 +1,4 @@
-# app.py — VERSÃO FINAL OTIMIZADA (Gráfico de Força, Novas Cotações e Forex Agrupado Corretamente)
+# app.py — VERSÃO FINAL OTIMIZADA (Agrupamento Original e Limpeza de Preço Refinada)
 
 import streamlit as st
 import requests
@@ -94,7 +94,7 @@ ASSET_TYPES = {
     'Crypto': 'crypto'
 }
 
-# ==================== FUNÇÕES DE AGRUPAMENTO ====================
+# ==================== FUNÇÕES DE AGRUPAMENTO (SOLICITADA PELO USUÁRIO) ====================
 
 # Mapeamento de categorias de Forex para Grupos de Moeda Base
 FOREX_GROUPS_MAPPING = {
@@ -111,25 +111,60 @@ FOREX_GROUPS_MAPPING = {
 }
 
 def agrupar_forex(data):
-    """Agrupa pares Forex estritamente pela moeda base no nome (mantendo a lógica do original)."""
-    grupos = {v: [] for v in FOREX_GROUPS_MAPPING.values()}
-    
-    # Ordem de preferência para agrupamento (para evitar misturas)
-    ordem_bases = ['Euro', 'British Pound', 'Australian Dollar', 'New Zealand Dollar', 'US Dollar', 
-                   'Canadian Dollar', 'Swiss Franc', 'Japanese Yen', 'Brazilian Real', 'Chinese Yuan']
-
+    """Agrupa pares Forex usando a lógica exata de `agrupar_por_base` fornecida pelo usuário."""
+    grupos = {
+        'Dólar Americano': [], 'Euro': [], 'Libra Esterlina': [], 'Iene Japonês': [],
+        'Dólar Australiano': [], 'Dólar Neozelandês': [], 'Dólar Canadense': [], 'Franco Suíço': [],
+        'Real Brasileiro': [], 'Yuan Chinês': []
+    }
     for item in data:
         name = item['Name']
-        for base_prefix in ordem_bases:
-            if name.startswith(base_prefix):
-                group_name = FOREX_GROUPS_MAPPING[base_prefix]
-                grupos[group_name].append(item)
-                break
-            
+        if name.startswith('US Dollar'): grupos['Dólar Americano'].append(item)
+        elif name.startswith('Euro'): grupos['Euro'].append(item)
+        elif name.startswith('British Pound'): grupos['Libra Esterlina'].append(item)
+        elif name.startswith('Japanese Yen'): grupos['Iene Japonês'].append(item)
+        elif name.startswith('Australian Dollar'): grupos['Dólar Australiano'].append(item)
+        elif name.startswith('New Zealand Dollar'): grupos['Dólar Neozelandês'].append(item)
+        elif name.startswith('Canadian Dollar'): grupos['Dólar Canadense'].append(item)
+        elif name.startswith('Swiss Franc'): grupos['Franco Suíço'].append(item)
+        elif name.startswith('Brazilian Real'): grupos['Real Brasileiro'].append(item)
+        elif name.startswith('Chinese Yuan'): grupos['Yuan Chinês'].append(item)
     return {k: v for k, v in grupos.items() if v}
 
 
-# ==================== FUNÇÕES DE SCRAPING (INALTERADAS) ====================
+# ==================== FUNÇÕES DE SCRAPING (COM LIMPEZA DE PREÇO AJUSTADA) ====================
+
+def clean_price(price_text):
+    """Limpeza de preço mais robusta para lidar com separadores de milhar/decimal inconsistentes."""
+    if not price_text or price_text == 'N/D':
+        return 'N/D'
+    
+    # 1. Substitui vírgula por ponto (para padronizar para o formato float americano)
+    price_temp = price_text.replace(',', '.')
+    
+    # 2. Se houver mais de um ponto (ex: 1.234.56), remove todos os pontos, exceto o último, se houver.
+    # Isso funciona para:
+    # - Forex (1.23456 -> 1.23456)
+    # - Índices (38.000,50 -> 38000.50)
+    
+    parts = price_temp.split('.')
+    if len(parts) > 2:
+        # Reconstroi o número removendo os separadores de milhar (que são os primeiros pontos)
+        integer_part = "".join(parts[:-1])
+        decimal_part = parts[-1]
+        price_clean = f"{integer_part}.{decimal_part}"
+    elif len(parts) == 2:
+        # Caso 1.2345 ou 123.45
+        price_clean = price_temp
+    else:
+        # Caso 12345
+        price_clean = price_temp
+        
+    # Tenta converter para float para validar, se falhar, retorna a string limpa (para N/D)
+    try:
+        return str(float(price_clean))
+    except ValueError:
+        return price_text # Retorna o original se a limpeza falhar
 
 def get_single_forex(symbol, name):
     url = f'https://br.investing.com/currencies/{symbol}-historical-data'
@@ -146,7 +181,9 @@ def get_single_forex(symbol, name):
         price = price_elem.text.strip() if price_elem else 'N/D'
         change_text = change_elem.text.strip() if change_elem else '(0,00%)'
         
-        price_clean = price.replace(',', '.').replace('.', '', price.count('.') - 1)
+        # Limpeza de preço ajustada
+        price_clean = clean_price(price)
+
         num = re.sub(r'[^\d,.-]', '', change_text).replace(',', '.')
         change_pct = round(float(num or 0), 2)
 
@@ -182,7 +219,9 @@ def get_single_non_forex(category, symbol, name):
         price = price_elem.text.strip() if price_elem else 'N/D'
         change_text = change_elem.text.strip() if change_elem else '(0,00%)'
         
-        price_clean = price.replace(',', '.').replace('.', '', price.count('.') - 1)
+        # Limpeza de preço ajustada
+        price_clean = clean_price(price)
+        
         num = re.sub(r'[^\d,.-]', '', change_text).replace(',', '.')
         change_pct = round(float(num or 0), 2)
 
@@ -199,7 +238,7 @@ def get_single_non_forex(category, symbol, name):
     except Exception as e:
         return {'Symbol': name.upper(), 'Name': name, 'Last Price': 'Erro', '1d Change (%)': 0.0, 'Category': category}
 
-# ==================== FUNÇÃO TURBO (FETCH GERAL - INALTERADA) ====================
+# ==================== FUNÇÕES TURBO, GRÁFICO E ESTILIZAÇÃO (INALTERADAS NO CONCEITO) ====================
 @st.cache_data(ttl=55)
 def fetch_all_turbo():
     results = []
@@ -220,7 +259,6 @@ def fetch_all_turbo():
         for future in as_completed(all_futures):
             results.append(future.result())
             
-    # Agrupa por categoria para o display
     grouped_results = {}
     for item in results:
         category = item['Category']
@@ -230,9 +268,7 @@ def fetch_all_turbo():
         
     return grouped_results
 
-# ==================== FUNÇÃO GRÁFICO (INALTERADA) ====================
 def grafico_forca(data):
-    # Aceita a lista completa de dados, mas filtra só Forex
     forex_data = [item for item in data if item['Category'] == 'Forex']
     
     if not forex_data:
@@ -241,6 +277,9 @@ def grafico_forca(data):
     df = pd.DataFrame(forex_data)
     df['Base'] = df['Symbol'].str.split('/').str[0]
     
+    # Converte 'Last Price' para float antes de agrupar (necessário para evitar erro se 'N/D' for passado)
+    df['1d Change (%)'] = pd.to_numeric(df['1d Change (%)'], errors='coerce')
+
     media = df.groupby('Base')['1d Change (%)'].mean().round(2).sort_values(ascending=False)
     
     fig = px.bar(media.reset_index(), x='Base', y='1d Change (%)',
@@ -254,7 +293,6 @@ def grafico_forca(data):
     fig.update_layout(height=500, showlegend=False, xaxis={'categoryorder': 'total descending'})
     return fig
 
-# Funções de estilização para o dataframe (Movida para fora do loop para ser reutilizada)
 def estilizar_dataframe(df):
      def cor(val):
         color = 'red' if val < 0 else 'green' if val > 0 else 'gray'
@@ -264,16 +302,13 @@ def estilizar_dataframe(df):
                      .format({'1d Change (%)': '{:.2f}%'})
      return styled
 
-# ==================== LOOP PRINCIPAL (AJUSTADO E LIMPO) ====================
+# ==================== LOOP PRINCIPAL ====================
 placeholder = st.empty()
 
 while True:
     start_time = time.time()
     with placeholder.container():
-        # Retorna um dicionário com categorias como chaves e a lista completa de resultados
         dados_agrupados = fetch_all_turbo()
-        
-        # Consolida todos os dados em uma lista única para o Gráfico e o CSV
         all_data_list = [item for sublist in dados_agrupados.values() for item in sublist]
         tempo = round(time.time() - start_time, 1)
 
@@ -286,15 +321,15 @@ while True:
             st.plotly_chart(grafico, use_container_width=True, key=f"plotly_force_{int(time.time())}")
             st.markdown("---")
 
-        # 2. EXIBE FOREX SEPARADO POR MOEDA BASE
+        # 2. EXIBE FOREX SEPARADO POR MOEDA BASE (USANDO O AGRUPAMENTO SOLICITADO)
         if 'Forex' in dados_agrupados:
             st.header("💱 Forex - Pares de Moedas")
             
-            # Chama a função de agrupamento de Forex (que usa a lógica de prefixo)
+            # CHAMA O AGRUPAMENTO FORNECIDO PELO USUÁRIO
             forex_grupos = agrupar_forex(dados_agrupados['Forex']) 
             forex_cols = st.columns(4)
             
-            # Garante a ordem correta das colunas
+            # Garante a ordem correta das colunas baseada no mapeamento
             ordered_groups = [g for g in FOREX_GROUPS_MAPPING.values() if g in forex_grupos]
             
             for idx, titulo in enumerate(ordered_groups):
@@ -303,6 +338,10 @@ while True:
                     df = pd.DataFrame(lista)[['Symbol', 'Last Price', '1d Change (%)']]
                     df.set_index('Symbol', inplace=True)
                     st.subheader(titulo)
+                    
+                    # Usa o formatador de preço para exibir o 'Last Price' no formato brasileiro (vírgula como decimal)
+                    # Nota: O campo 'Last Price' no DF é string (limpo para ser float-friendly), mas o Streamlit vai
+                    # exibi-lo como string de qualquer forma.
                     st.dataframe(estilizar_dataframe(df), width="stretch")
             st.markdown("---")
 
