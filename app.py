@@ -1,4 +1,4 @@
-# app.py — VERSÃO FINAL COM GRÁFICO DE FORÇA RELATIVA + NOVAS COTAÇÕES (Forex Agrupado Corretamente)
+# app.py — VERSÃO FINAL OTIMIZADA (Gráfico de Força, Novas Cotações e Forex Agrupado Corretamente)
 
 import streamlit as st
 import requests
@@ -94,10 +94,9 @@ ASSET_TYPES = {
     'Crypto': 'crypto'
 }
 
-# ==================== FUNÇÕES DE AGRUPAMENTO (REVISADA) ====================
+# ==================== FUNÇÕES DE AGRUPAMENTO ====================
 
-# Mapeamento de categorias de Forex para Grupos de Moeda Base (para manter a estrutura do original)
-# Chaves são as bases das moedas no nome (e.g., 'Euro', 'US Dollar')
+# Mapeamento de categorias de Forex para Grupos de Moeda Base
 FOREX_GROUPS_MAPPING = {
     'US Dollar': 'Dólar Americano', 
     'Euro': 'Euro', 
@@ -111,27 +110,24 @@ FOREX_GROUPS_MAPPING = {
     'Chinese Yuan': 'Yuan Chinês'
 }
 
+def agrupar_forex(data):
+    """Agrupa pares Forex estritamente pela moeda base no nome (mantendo a lógica do original)."""
+    grupos = {v: [] for v in FOREX_GROUPS_MAPPING.values()}
+    
+    # Ordem de preferência para agrupamento (para evitar misturas)
+    ordem_bases = ['Euro', 'British Pound', 'Australian Dollar', 'New Zealand Dollar', 'US Dollar', 
+                   'Canadian Dollar', 'Swiss Franc', 'Japanese Yen', 'Brazilian Real', 'Chinese Yuan']
 
-# ==================== AGRUPAMENTO ====================
-def agrupar_por_base(data):
-    grupos = {
-        'Dólar Americano': [], 'Euro': [], 'Libra Esterlina': [], 'Iene Japonês': [],
-        'Dólar Australiano': [], 'Dólar Neozelandês': [], 'Dólar Canadense': [], 'Franco Suíço': [],
-        'Real Brasileiro': [], 'Yuan Chinês': []
-    }
     for item in data:
         name = item['Name']
-        if name.startswith('US Dollar'): grupos['Dólar Americano'].append(item)
-        elif name.startswith('Euro'): grupos['Euro'].append(item)
-        elif name.startswith('British Pound'): grupos['Libra Esterlina'].append(item)
-        elif name.startswith('Japanese Yen'): grupos['Iene Japonês'].append(item)
-        elif name.startswith('Australian Dollar'): grupos['Dólar Australiano'].append(item)
-        elif name.startswith('New Zealand Dollar'): grupos['Dólar Neozelandês'].append(item)
-        elif name.startswith('Canadian Dollar'): grupos['Dólar Canadense'].append(item)
-        elif name.startswith('Swiss Franc'): grupos['Franco Suíço'].append(item)
-        elif name.startswith('Brazilian Real'): grupos['Real Brasileiro'].append(item)
-        elif name.startswith('Chinese Yuan'): grupos['Yuan Chinês'].append(item)
+        for base_prefix in ordem_bases:
+            if name.startswith(base_prefix):
+                group_name = FOREX_GROUPS_MAPPING[base_prefix]
+                grupos[group_name].append(item)
+                break
+            
     return {k: v for k, v in grupos.items() if v}
+
 
 # ==================== FUNÇÕES DE SCRAPING (INALTERADAS) ====================
 
@@ -150,7 +146,6 @@ def get_single_forex(symbol, name):
         price = price_elem.text.strip() if price_elem else 'N/D'
         change_text = change_elem.text.strip() if change_elem else '(0,00%)'
         
-        # Limpa o texto de preço/porcentagem
         price_clean = price.replace(',', '.').replace('.', '', price.count('.') - 1)
         num = re.sub(r'[^\d,.-]', '', change_text).replace(',', '.')
         change_pct = round(float(num or 0), 2)
@@ -237,10 +232,13 @@ def fetch_all_turbo():
 
 # ==================== FUNÇÃO GRÁFICO (INALTERADA) ====================
 def grafico_forca(data):
-    if not data:
+    # Aceita a lista completa de dados, mas filtra só Forex
+    forex_data = [item for item in data if item['Category'] == 'Forex']
+    
+    if not forex_data:
         return None
         
-    df = pd.DataFrame(data)
+    df = pd.DataFrame(forex_data)
     df['Base'] = df['Symbol'].str.split('/').str[0]
     
     media = df.groupby('Base')['1d Change (%)'].mean().round(2).sort_values(ascending=False)
@@ -256,47 +254,47 @@ def grafico_forca(data):
     fig.update_layout(height=500, showlegend=False, xaxis={'categoryorder': 'total descending'})
     return fig
 
-# ==================== LOOP PRINCIPAL — VERSÃO 100% ESTÁVEL ====================
+# Funções de estilização para o dataframe (Movida para fora do loop para ser reutilizada)
+def estilizar_dataframe(df):
+     def cor(val):
+        color = 'red' if val < 0 else 'green' if val > 0 else 'gray'
+        return f'color: {color}; font-weight: bold'
+
+     styled = df.style.map(cor, subset=['1d Change (%)']) \
+                     .format({'1d Change (%)': '{:.2f}%'})
+     return styled
+
+# ==================== LOOP PRINCIPAL (AJUSTADO E LIMPO) ====================
 placeholder = st.empty()
 
 while True:
     start_time = time.time()
     with placeholder.container():
-        dados = fetch_all_turbo()
+        # Retorna um dicionário com categorias como chaves e a lista completa de resultados
+        dados_agrupados = fetch_all_turbo()
+        
+        # Consolida todos os dados em uma lista única para o Gráfico e o CSV
+        all_data_list = [item for sublist in dados_agrupados.values() for item in sublist]
         tempo = round(time.time() - start_time, 1)
 
-        st.markdown(f"**Atualização:** {datetime.now().strftime('%d/%m/%Y %H:%M:%S')} • Carregado em **{tempo}s**")
+        st.markdown(f"**Última Atualização:** {datetime.now().strftime('%d/%m/%Y %H:%M:%S')} • Carregado em **{tempo}s**")
+        st.markdown("---")
+        
+        # 1. EXIBE GRÁFICO DE FORÇA RELATIVA (SOMENTE FOREX)
+        grafico = grafico_forca(all_data_list)
+        if grafico:
+            st.plotly_chart(grafico, use_container_width=True, key=f"plotly_force_{int(time.time())}")
+            st.markdown("---")
 
-        grupos = agrupar_por_base(dados)
-
-        # Tabelas
-        cols = st.columns(4)
-        for idx, (titulo, lista) in enumerate(grupos.items()):
-            with cols[idx % 4]:
-                df = pd.DataFrame(lista)[['Symbol', 'Last Price', '1d Change (%)']]
-                df.set_index('Symbol', inplace=True)
-
-                def cor(val):
-                    color = 'red' if val < 0 else 'green' if val > 0 else 'gray'
-                    return f'color: {color}; font-weight: bold'
-
-                styled = df.style.map(cor, subset=['1d Change (%)']) \
-                                .format({'1d Change (%)': '{:.2f}%'})
-
-                st.subheader(titulo)
-                st.dataframe(styled, width="stretch")
-
-        # GRÁFICO COM KEY ÚNICO A CADA LOOP → NUNCA MAIS VAI DAR ERRO
-        st.plotly_chart(grafico_forca(dados), use_container_width=True, key=f"plotly_{int(time.time())}")
-
-        # 2. EXIBE FOREX SEPARADO POR MOEDA BASE (AGORA COM AGRUPAMENTO MAIS PRECISO)
+        # 2. EXIBE FOREX SEPARADO POR MOEDA BASE
         if 'Forex' in dados_agrupados:
             st.header("💱 Forex - Pares de Moedas")
-            # CHAMADA DA FUNÇÃO DE AGRUPAMENTO CORRIGIDA
+            
+            # Chama a função de agrupamento de Forex (que usa a lógica de prefixo)
             forex_grupos = agrupar_forex(dados_agrupados['Forex']) 
             forex_cols = st.columns(4)
             
-            # Garante que a ordem das colunas de Forex seja a mesma do FOREX_GROUPS_MAPPING
+            # Garante a ordem correta das colunas
             ordered_groups = [g for g in FOREX_GROUPS_MAPPING.values() if g in forex_grupos]
             
             for idx, titulo in enumerate(ordered_groups):
@@ -308,7 +306,7 @@ while True:
                     st.dataframe(estilizar_dataframe(df), width="stretch")
             st.markdown("---")
 
-        # 3. EXIBE ÍNDICES, COMMODITIES E CRYPTO (Inalterado)
+        # 3. EXIBE ÍNDICES, COMMODITIES E CRYPTO
         st.header("🌎 Outros Ativos (Índices, Commodities e Crypto)")
         ordenacao = ['USA', 'Asia/Pacifico', 'Europa', 'Commodities', 'Crypto']
         
@@ -326,8 +324,7 @@ while True:
                 st.markdown("***")
         
 
-        # Download CSV - Inclui todos os dados
-        all_data_list = [item for sublist in dados_agrupados.values() for item in sublist]
+        # Download CSV
         csv = pd.DataFrame(all_data_list).to_csv(index=False, encoding='utf-8')
         st.download_button(
             label="Baixar todos os dados (CSV)",
@@ -337,4 +334,3 @@ while True:
         )
         
     time.sleep(60)
-
