@@ -49,9 +49,9 @@ assets = {
     },
     'USA': {'us-spx-500-futures': 'S&P 500', 'nq-100-futures': 'Nasdaq 100', 'us-30-futures': 'US30',
             'smallcap-2000-futures': 'Russel 2000', 'volatility-s-p-500': 'VIX', 'usdollar': 'DXY'},
-    'Asia/Pacifico': {'hong-kong-40-futures': 'Hang Seng', 'shanghai-composite': 'SSE Composite', 'japan-225-futures': 'Nikkei 225', 'ftse-china-25': 'FTSE China'},
+    'Asia/Pacifico': {'hong-kong-40-futures': 'Hang Seng', 'shanghai-composite': 'SSE Composite', 'japan-225-futures': 'Nikkei 225', 'ftse-china-25': 'FTSE China', 'india-50-futures': 'Nifty 50', 'australia-200-futures': 'ASX 200'},
     'Europa': {'uk-100-futures': 'FTSE 100', 'germany-30-futures': 'DAX', 'france-40-futures': 'CAC 40',
-               'eu-stocks-50-futures': 'STOXX 50', 'spain-35-futures': 'IBEX 35'},
+               'eu-stocks-50-futures': 'STOXX 50', 'spain-35-futures': 'IBEX 35', 'italy-40-futures': 'FTSE MIB', 'euro-stoxx-600': 'STOXX 600'},
     'Commodities': {'gold': 'Gold', 'silver': 'Silver', 'platinum': 'Platinum', 'copper': 'Copper',
                     'crude-oil': 'Crude Oil (WTI)', 'brent-oil': 'Brent Oil', 'natural-gas': 'Natural Gas'},
     'Crypto': {'btc-usd': 'Bitcoin', 'eth-usd': 'Ethereum'}
@@ -229,3 +229,4 @@ while True:
         st.download_button("Baixar todos os dados (CSV)", csv, f"cotacoes_{agora_brasil.strftime('%Y%m%d_%H%M')}.csv", "text/csv")
 
     time.sleep(60)
+
