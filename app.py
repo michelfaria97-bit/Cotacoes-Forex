@@ -3,7 +3,7 @@ import streamlit as st
 import requests
 import re
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from bs4 import BeautifulSoup
 import pandas as pd
 import plotly.express as px
@@ -44,15 +44,15 @@ assets = {
         'jpy-aud': 'Japanese Yen/Australian Dollar', 'brl-cad': 'Brazilian Real/Canadian Dollar', 'cny-usd': 'Chinese Yuan/US Dollar',
         'cny-nzd': 'Chinese Yuan/New Zealand Dollar', 'cny-jpy': 'Chinese Yuan/Japanese Yen', 'cny-gbp': 'Chinese Yuan/British Pound',
         'cny-chf': 'Chinese Yuan/Swiss Franc', 'cny-aud': 'Chinese Yuan/Australian Dollar', 'cny-eur': 'Chinese Yuan/Euro',
-        'brl-usd': 'Brazilian Real/US Dollar', 'brl-jpy': 'Brazilian Real/Japanese Yen', 'brl-gbp': 'Brazilian Real/British Pound', 'brl-nzd': 'Brazilian Real/New Zealand Dollar', 
+        'brl-usd': 'Brazilian Real/US Dollar', 'brl-jpy': 'Brazilian Real/Japanese Yen', 'brl-gbp': 'Brazilian Real/British Pound', 'brl-nzd': 'Brazilian Real/New Zealand Dollar',
         'brl-aud': 'Brazilian Real/Australian Dollar', 'brl-eur': 'Brazilian Real/Euro'
     },
-    'USA': {'us-spx-500-futures': 'S&P 500', 'nq-100-futures': 'Nasdaq 100', 'us-30-futures': 'US30', 
+    'USA': {'us-spx-500-futures': 'S&P 500', 'nq-100-futures': 'Nasdaq 100', 'us-30-futures': 'US30',
             'smallcap-2000-futures': 'Russel 2000', 'volatility-s-p-500': 'VIX', 'usdollar': 'DXY'},
     'Asia/Pacifico': {'hong-kong-40-futures': 'Hang Seng', 'shanghai-composite': 'SSE Composite', 'japan-225-futures': 'Nikkei 225', 'ftse-china-25': 'FTSE China'},
-    'Europa': {'uk-100-futures': 'FTSE 100', 'germany-30-futures': 'DAX', 'france-40-futures': 'CAC 40', 
+    'Europa': {'uk-100-futures': 'FTSE 100', 'germany-30-futures': 'DAX', 'france-40-futures': 'CAC 40',
                'eu-stocks-50-futures': 'STOXX 50', 'spain-35-futures': 'IBEX 35'},
-    'Commodities': {'gold': 'Gold', 'silver': 'Silver', 'platinum': 'Platinum', 'copper': 'Copper', 
+    'Commodities': {'gold': 'Gold', 'silver': 'Silver', 'platinum': 'Platinum', 'copper': 'Copper',
                     'crude-oil': 'Crude Oil (WTI)', 'brent-oil': 'Brent Oil', 'natural-gas': 'Natural Gas'},
     'Crypto': {'btc-usd': 'Bitcoin', 'eth-usd': 'Ethereum'}
 }
@@ -93,9 +93,9 @@ def get_single_non_forex(category, symbol, name):
         url = f'https://br.investing.com/indices/{symbol}'
     else:
         url = f'https://br.investing.com/commodities/{symbol}'
-    headers = {'User-Agent': 'Mozilla/5.0'}
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
     try:
-        r = requests.get(url, headers=headers, timeout=15)
+        r = requests.get(url, headers=headers, timeout=20)
         soup = BeautifulSoup(r.text, 'html.parser')
         price_elem = soup.find('div', {'data-test': 'instrument-price-last'})
         change_elem = soup.find('span', {'data-test': 'instrument-price-change-percent'})
@@ -163,12 +163,17 @@ def fetch_all():
 
 # ==================== LOOP PRINCIPAL ====================
 placeholder = st.empty()
+
+# Horário de Brasília (UTC-3) sem usar zoneinfo → funciona em qualquer ambiente
+tz_brasil = timedelta(hours=-3)
+
 while True:
     inicio = time.time()
     with placeholder.container():
         dados = fetch_all()
-        
-        st.markdown(f"**Atualizado:** {datetime.now():%d/%m/%Y %H:%M:%S} • Tempo: {time.time()-inicio:.1f}s")
+        agora_brasil = datetime.now() + tz_brasil
+
+        st.markdown(f"**Atualizado:** {agora_brasil.strftime('%d/%m/%Y %H:%M:%S')} (Brasília) • Tempo: {time.time()-inicio:.1f}s")
         st.markdown("---")
 
         # GRÁFICO DE FORÇA (MANTIDO!)
@@ -221,13 +226,6 @@ while True:
 
         # Download
         csv = pd.DataFrame(dados).to_csv(index=False, encoding='utf-8')
-        st.download_button("Baixar todos os dados (CSV)", csv, f"cotacoes_{datetime.now():%Y%m%d_%H%M}.csv", "text/csv")
+        st.download_button("Baixar todos os dados (CSV)", csv, f"cotacoes_{agora_brasil.strftime('%Y%m%d_%H%M')}.csv", "text/csv")
 
     time.sleep(60)
-
-
-
-
-
-
-
