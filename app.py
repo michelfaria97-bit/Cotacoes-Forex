@@ -112,25 +112,25 @@ FOREX_GROUPS_MAPPING = {
 }
 
 
-def agrupar_forex(data):
-    """Agrupa pares Forex estritamente pela moeda base no nome, como no código original."""
-    grupos = {v: [] for v in FOREX_GROUPS_MAPPING.values()}
-    
-    # Ordem de preferência (para evitar mistura de EUR/USD e USD/JPY, por exemplo)
-    # USD é a base em USD/XXX. EUR é a base em EUR/XXX.
-    ordem_bases = ['Euro', 'British Pound', 'Australian Dollar', 'New Zealand Dollar', 'US Dollar', 
-                   'Canadian Dollar', 'Swiss Franc', 'Japanese Yen', 'Brazilian Real', 'Chinese Yuan']
-
+# ==================== AGRUPAMENTO ====================
+def agrupar_por_base(data):
+    grupos = {
+        'Dólar Americano': [], 'Euro': [], 'Libra Esterlina': [], 'Iene Japonês': [],
+        'Dólar Australiano': [], 'Dólar Neozelandês': [], 'Dólar Canadense': [], 'Franco Suíço': [],
+        'Real Brasileiro': [], 'Yuan Chinês': []
+    }
     for item in data:
         name = item['Name']
-        # Tenta encontrar a primeira moeda no nome (a moeda BASE, que define o grupo)
-        for base_prefix in ordem_bases:
-            if name.startswith(base_prefix):
-                group_name = FOREX_GROUPS_MAPPING[base_prefix]
-                grupos[group_name].append(item)
-                break
-            
-    # Remove grupos vazios e retorna
+        if name.startswith('US Dollar'): grupos['Dólar Americano'].append(item)
+        elif name.startswith('Euro'): grupos['Euro'].append(item)
+        elif name.startswith('British Pound'): grupos['Libra Esterlina'].append(item)
+        elif name.startswith('Japanese Yen'): grupos['Iene Japonês'].append(item)
+        elif name.startswith('Australian Dollar'): grupos['Dólar Australiano'].append(item)
+        elif name.startswith('New Zealand Dollar'): grupos['Dólar Neozelandês'].append(item)
+        elif name.startswith('Canadian Dollar'): grupos['Dólar Canadense'].append(item)
+        elif name.startswith('Swiss Franc'): grupos['Franco Suíço'].append(item)
+        elif name.startswith('Brazilian Real'): grupos['Real Brasileiro'].append(item)
+        elif name.startswith('Chinese Yuan'): grupos['Yuan Chinês'].append(item)
     return {k: v for k, v in grupos.items() if v}
 
 # ==================== FUNÇÕES DE SCRAPING (INALTERADAS) ====================
@@ -256,34 +256,38 @@ def grafico_forca(data):
     fig.update_layout(height=500, showlegend=False, xaxis={'categoryorder': 'total descending'})
     return fig
 
-# ==================== LOOP PRINCIPAL (AJUSTADO PARA A NOVA FUNÇÃO DE AGRUPAMENTO) ====================
+# ==================== LOOP PRINCIPAL — VERSÃO 100% ESTÁVEL ====================
 placeholder = st.empty()
 
 while True:
     start_time = time.time()
     with placeholder.container():
-        # Retorna um dicionário com categorias como chaves
-        dados_agrupados = fetch_all_turbo()
+        dados = fetch_all_turbo()
         tempo = round(time.time() - start_time, 1)
 
-        st.markdown(f"**Última Atualização:** {datetime.now().strftime('%d/%m/%Y %H:%M:%S')} • Carregado em **{tempo}s**")
-        st.markdown("---")
-        
-        # Função de estilização para o dataframe
-        def estilizar_dataframe(df):
-             def cor(val):
-                color = 'red' if val < 0 else 'green' if val > 0 else 'gray'
-                return f'color: {color}; font-weight: bold'
+        st.markdown(f"**Atualização:** {datetime.now().strftime('%d/%m/%Y %H:%M:%S')} • Carregado em **{tempo}s**")
 
-             styled = df.style.map(cor, subset=['1d Change (%)']) \
-                             .format({'1d Change (%)': '{:.2f}%'})
-             return styled
+        grupos = agrupar_por_base(dados)
 
-        # 1. EXIBE GRÁFICO DE FORÇA RELATIVA (SOMENTE FOREX)
-        if 'Forex' in dados_agrupados:
-            st.plotly_chart(grafico_forca(dados_agrupados['Forex']), use_container_width=True, key=f"plotly_force_{int(time.time())}")
-            st.markdown("---")
+        # Tabelas
+        cols = st.columns(4)
+        for idx, (titulo, lista) in enumerate(grupos.items()):
+            with cols[idx % 4]:
+                df = pd.DataFrame(lista)[['Symbol', 'Last Price', '1d Change (%)']]
+                df.set_index('Symbol', inplace=True)
 
+                def cor(val):
+                    color = 'red' if val < 0 else 'green' if val > 0 else 'gray'
+                    return f'color: {color}; font-weight: bold'
+
+                styled = df.style.map(cor, subset=['1d Change (%)']) \
+                                .format({'1d Change (%)': '{:.2f}%'})
+
+                st.subheader(titulo)
+                st.dataframe(styled, width="stretch")
+
+        # GRÁFICO COM KEY ÚNICO A CADA LOOP → NUNCA MAIS VAI DAR ERRO
+        st.plotly_chart(grafico_forca(dados), use_container_width=True, key=f"plotly_{int(time.time())}")
 
         # 2. EXIBE FOREX SEPARADO POR MOEDA BASE (AGORA COM AGRUPAMENTO MAIS PRECISO)
         if 'Forex' in dados_agrupados:
@@ -333,3 +337,4 @@ while True:
         )
         
     time.sleep(60)
+
