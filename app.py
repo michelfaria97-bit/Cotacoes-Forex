@@ -1,4 +1,4 @@
-# app.py — VERSÃO FINAL OTIMIZADA (Agrupamento Original e Limpeza de Preço Refinada)
+# app.py — VERSÃO FINAL OTIMIZADA (Agrupamento EXATO pela Moeda Base e Limpeza de Preço Refinada)
 
 import streamlit as st
 import requests
@@ -111,7 +111,7 @@ FOREX_GROUPS_MAPPING = {
 }
 
 def agrupar_forex(data):
-    """Agrupa pares Forex usando a lógica exata de `agrupar_por_base` fornecida pelo usuário."""
+    """Agrupa pares Forex estritamente pela moeda base no nome (usando a lógica do usuário)."""
     grupos = {
         'Dólar Americano': [], 'Euro': [], 'Libra Esterlina': [], 'Iene Japonês': [],
         'Dólar Australiano': [], 'Dólar Neozelandês': [], 'Dólar Canadense': [], 'Franco Suíço': [],
@@ -142,11 +142,7 @@ def clean_price(price_text):
     # 1. Substitui vírgula por ponto (para padronizar para o formato float americano)
     price_temp = price_text.replace(',', '.')
     
-    # 2. Se houver mais de um ponto (ex: 1.234.56), remove todos os pontos, exceto o último, se houver.
-    # Isso funciona para:
-    # - Forex (1.23456 -> 1.23456)
-    # - Índices (38.000,50 -> 38000.50)
-    
+    # 2. Remove todos os pontos, exceto o último, se houver.
     parts = price_temp.split('.')
     if len(parts) > 2:
         # Reconstroi o número removendo os separadores de milhar (que são os primeiros pontos)
@@ -154,17 +150,17 @@ def clean_price(price_text):
         decimal_part = parts[-1]
         price_clean = f"{integer_part}.{decimal_part}"
     elif len(parts) == 2:
-        # Caso 1.2345 ou 123.45
+        # Caso 1.2345 (Forex) ou 123.45 (Commodity/Índice)
         price_clean = price_temp
     else:
-        # Caso 12345
+        # Caso 12345 (número inteiro sem decimal)
         price_clean = price_temp
         
-    # Tenta converter para float para validar, se falhar, retorna a string limpa (para N/D)
+    # Tenta converter para float para validar
     try:
         return str(float(price_clean))
     except ValueError:
-        return price_text # Retorna o original se a limpeza falhar
+        return price_text # Retorna o original se a limpeza falhar (deve ser 'N/D')
 
 def get_single_forex(symbol, name):
     url = f'https://br.investing.com/currencies/{symbol}-historical-data'
@@ -181,7 +177,6 @@ def get_single_forex(symbol, name):
         price = price_elem.text.strip() if price_elem else 'N/D'
         change_text = change_elem.text.strip() if change_elem else '(0,00%)'
         
-        # Limpeza de preço ajustada
         price_clean = clean_price(price)
 
         num = re.sub(r'[^\d,.-]', '', change_text).replace(',', '.')
@@ -219,7 +214,6 @@ def get_single_non_forex(category, symbol, name):
         price = price_elem.text.strip() if price_elem else 'N/D'
         change_text = change_elem.text.strip() if change_elem else '(0,00%)'
         
-        # Limpeza de preço ajustada
         price_clean = clean_price(price)
         
         num = re.sub(r'[^\d,.-]', '', change_text).replace(',', '.')
@@ -277,7 +271,6 @@ def grafico_forca(data):
     df = pd.DataFrame(forex_data)
     df['Base'] = df['Symbol'].str.split('/').str[0]
     
-    # Converte 'Last Price' para float antes de agrupar (necessário para evitar erro se 'N/D' for passado)
     df['1d Change (%)'] = pd.to_numeric(df['1d Change (%)'], errors='coerce')
 
     media = df.groupby('Base')['1d Change (%)'].mean().round(2).sort_values(ascending=False)
@@ -321,27 +314,25 @@ while True:
             st.plotly_chart(grafico, use_container_width=True, key=f"plotly_force_{int(time.time())}")
             st.markdown("---")
 
-        # 2. EXIBE FOREX SEPARADO POR MOEDA BASE (USANDO O AGRUPAMENTO SOLICITADO)
+        # 2. EXIBE FOREX SEPARADO POR MOEDA BASE (AGRUPAMENTO POR name.startswith)
         if 'Forex' in dados_agrupados:
             st.header("💱 Forex - Pares de Moedas")
             
-            # CHAMA O AGRUPAMENTO FORNECIDO PELO USUÁRIO
+            # CHAMA O AGRUPAMENTO QUE FILTRA PELA MOEDA BASE
             forex_grupos = agrupar_forex(dados_agrupados['Forex']) 
             forex_cols = st.columns(4)
             
-            # Garante a ordem correta das colunas baseada no mapeamento
+            # Garante a ordem de exibição das colunas baseada no mapeamento fixo
             ordered_groups = [g for g in FOREX_GROUPS_MAPPING.values() if g in forex_grupos]
             
             for idx, titulo in enumerate(ordered_groups):
                 lista = forex_grupos[titulo]
+                # Usa o índice modulado por 4 para distribuir em 4 colunas
                 with forex_cols[idx % 4]:
                     df = pd.DataFrame(lista)[['Symbol', 'Last Price', '1d Change (%)']]
                     df.set_index('Symbol', inplace=True)
                     st.subheader(titulo)
                     
-                    # Usa o formatador de preço para exibir o 'Last Price' no formato brasileiro (vírgula como decimal)
-                    # Nota: O campo 'Last Price' no DF é string (limpo para ser float-friendly), mas o Streamlit vai
-                    # exibi-lo como string de qualquer forma.
                     st.dataframe(estilizar_dataframe(df), width="stretch")
             st.markdown("---")
 
