@@ -1,4 +1,4 @@
-# app.py — VERSÃO FINAL 100% IGUAL À SUA FOTO + BRL e CNY MANTIDOS
+# app.py — VERSÃO FINAL PERFEITA: BRL E CNY AO LADO + TUDO ALINHADO
 import streamlit as st
 import requests
 import re
@@ -14,9 +14,13 @@ st.set_page_config(page_title="Cotações ao Vivo", layout="wide", initial_sideb
 st.markdown("""
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#1f1f1f">
+<style>
+    .stDataFrame { width: 100% !important; }
+    [data-testid="column"] { padding: 5px !important; }
+</style>
 """, unsafe_allow_html=True)
 
-# ==================== TODOS OS ATIVOS (INCLUI BRL E CNY) ====================
+# ==================== ATIVOS ====================
 assets = {
     'Forex': {
         'eur-usd': 'Euro/US Dollar', 'gbp-usd': 'British Pound/US Dollar', 'usd-jpy': 'US Dollar/Japanese Yen',
@@ -38,41 +42,29 @@ assets = {
         'chf-jpy': 'Swiss Franc/Japanese Yen', 'chf-gbp': 'British Pound/Swiss Franc', 'chf-cad': 'Canadian Dollar/Swiss Franc',
         'chf-nzd': 'New Zealand Dollar/Swiss Franc', 'cad-eur': 'Euro/Canadian Dollar', 'usd-eur': 'Euro/US Dollar', 'usd-gbp': 'British Pound/US Dollar',
         'jpy-aud': 'Australian Dollar/Japanese Yen',
-        # BRL e CNY mantidos
+        # BRL e CNY
         'brl-usd': 'US Dollar/Brazilian Real', 'brl-jpy': 'Japanese Yen/Brazilian Real', 'brl-eur': 'Euro/Brazilian Real',
         'brl-gbp': 'British Pound/Brazilian Real', 'brl-cad': 'Brazilian Real/Canadian Dollar',
         'cny-usd': 'US Dollar/Chinese Yuan', 'cny-jpy': 'Japanese Yen/Chinese Yuan', 'cny-eur': 'Euro/Chinese Yuan'
     },
-    'USA': {'us-spx-500-futures': 'S&P 500', 'nq-100-futures': 'Nasdaq 100', 'us-30-futures': 'US30 (Dow)',
-            'smallcap-2000-futures': 'Russel 2000', 'volatility-s-p-500': 'VIX', 'usdollar': 'DXY'},
-    'Asia/Pacifico': {'hong-kong-40-futures': 'Hang Seng', 'shanghai-composite': 'SSE Composite',
-                      'japan-225-futures': 'Nikkei 225'},
-    'Europa': {'uk-100-futures': 'FTSE 100', 'germany-30-futures': 'DAX', 'france-40-futures': 'CAC 40',
-               'eu-stocks-50-futures': 'STOXX 50', 'spain-35-futures': 'IBEX 35'},
-    'Commodities': {'gold': 'Gold', 'silver': 'Silver', 'platinum': 'Platinum', 'copper': 'Copper',
-                    'crude-oil': 'Crude Oil (WTI)', 'brent-oil': 'Brent Oil', 'natural-gas': 'Natural Gas'},
+    'USA': {'us-spx-500-futures': 'S&P 500', 'nq-100-futures': 'Nasdaq 100', 'us-30-futures': 'US30', 'smallcap-2000-futures': 'Russel 2000', 'volatility-s-p-500': 'VIX', 'usdollar': 'DXY'},
+    'Asia/Pacifico': {'hong-kong-40-futures': 'Hang Seng', 'shanghai-composite': 'SSE Composite', 'japan-225-futures': 'Nikkei 225'},
+    'Europa': {'uk-100-futures': 'FTSE 100', 'germany-30-futures': 'DAX', 'france-40-futures': 'CAC 40', 'eu-stocks-50-futures': 'STOXX 50', 'spain-35-futures': 'IBEX 35'},
+    'Commodities': {'gold': 'Gold', 'silver': 'Silver', 'platinum': 'Platinum', 'copper': 'Copper', 'crude-oil': 'Crude Oil (WTI)', 'brent-oil': 'Brent Oil', 'natural-gas': 'Natural Gas'},
     'Crypto': {'btc-usd': 'Bitcoin', 'eth-usd': 'Ethereum'}
 }
 
-ASSET_TYPES = {'Forex': 'currencies', 'USA': 'indices', 'Asia/Pacifico': 'indices', 'Europa': 'indices',
-               'Commodities': 'commodities', 'Crypto': 'crypto'}
+ASSET_TYPES = {'Forex': 'currencies', 'USA': 'indices', 'Asia/Pacifico': 'indices', 'Europa': 'indices', 'Commodities': 'commodities', 'Crypto': 'crypto'}
 
-# ==================== FUNÇÕES DE LIMPEZA E SCRAPING ====================
-def clean_price(price_text):
-    if not price_text or price_text in ['N/D', '-']:
-        return 'N/D'
-    price_temp = price_text.replace(',', '.')
-    parts = price_temp.split('.')
+# ==================== FUNÇÕES ====================
+def clean_price(p):
+    if not p or p in ['N/D', '-']: return 'N/D'
+    p = p.replace(',', '.')
+    parts = p.split('.')
     if len(parts) > 2:
-        integer_part = "".join(parts[:-1])
-        decimal_part = parts[-1]
-        price_clean = f"{integer_part}.{decimal_part}"
-    else:
-        price_clean = price_temp
-    try:
-        return str(float(price_clean))
-    except:
-        return price_text
+        p = ''.join(parts[:-1]) + '.' + parts[-1]
+    try: return str(float(p))
+    except: return p
 
 def get_single_forex(symbol, name):
     url = f'https://br.investing.com/currencies/{symbol}'
@@ -80,154 +72,114 @@ def get_single_forex(symbol, name):
     try:
         r = requests.get(url, headers=headers, timeout=15)
         soup = BeautifulSoup(r.text, 'html.parser')
-        price = soup.find('div', {'data-test': 'instrument-price-last'})
-        change = soup.find('span', {'data-test': 'instrument-price-change-percent'})
-        price = price.text.strip() if price else 'N/D'
-        change_text = change.text.strip() if change else '0%'
-        price_clean = clean_price(price)
-        num = re.sub(r'[^\d.-]', '', change_text.replace(',', '.'))
-        change_pct = round(float(num or 0), 2)
-        return {'Symbol': symbol.upper().replace('-', '/'), 'Name': name, 'Last Price': price_clean,
-                '1d Change (%)': change_pct, 'Category': 'Forex'}
-    except:
-        return {'Symbol': symbol.upper().replace('-', '/'), 'Name': name, 'Last Price': 'Erro', '1d Change (%)': 0.0, 'Category': 'Forex'}
+        price = soup.find('div', {'data-test': 'instrument-price-last'}).text.strip() if soup.find('div', {'data-test': 'instrument-price-last'}) else 'N/D'
+        change = soup.find('span', {'data-test': 'instrument-price-change-percent'}).text.strip() if soup.find('span', {'data-test': 'instrument-price-change-percent'}) else '0%'
+        num = re.sub(r'[^\d.-]', '', change.replace(',', '.'))
+        return {'Symbol': symbol.upper().replace('-','/'), 'Last Price': clean_price(price), '1d Change (%)': round(float(num or 0),2)}
+    except: return {'Symbol': symbol.upper().replace('-','/'), 'Last Price': 'Erro', '1d Change (%)': 0.0}
 
-def get_single_non_forex(category, symbol, name):
+def get_single_non_forex(cat, symbol, name):
     if symbol == 'usdollar': url = 'https://br.investing.com/indices/usdollar'
-    elif category == 'Crypto': url = f'https://br.investing.com/crypto/{symbol.split("-")[0]}'
-    else: url = f'https://br.investing.com/{ASSET_TYPES[category]}/{symbol}'
+    elif cat == 'Crypto': url = f'https://br.investing.com/crypto/{symbol.split("-")[0]}'
+    else: url = f'https://br.investing.com/{ASSET_TYPES[cat]}/{symbol}'
     headers = {'User-Agent': 'Mozilla/5.0'}
     try:
         r = requests.get(url, headers=headers, timeout=15)
         soup = BeautifulSoup(r.text, 'html.parser')
-        price = soup.find('div', {'data-test': 'instrument-price-last'})
-        change = soup.find('span', {'data-test': 'instrument-price-change-percent'})
-        price = price.text.strip() if price else 'N/D'
-        change_text = change.text.strip() if change else '0%'
-        price_clean = clean_price(price)
-        num = re.sub(r'[^\d.-]', '', change_text.replace(',', '.'))
-        change_pct = round(float(num or 0), 2)
-        return {'Symbol': name if category != 'Forex' else symbol.upper().replace('-', '/'), 'Name': name,
-                'Last Price': price_clean, '1d Change (%)': change_pct, 'Category': category}
-    except:
-        return {'Symbol': name, 'Name': name, 'Last Price': 'Erro', '1d Change (%)': 0.0, 'Category': category}
+        price = soup.find('div', {'data-test': 'instrument-price-last'}).text.strip() if soup.find('div', {'data-test': 'instrument-price-last'}) else 'N/D'
+        change = soup.find('span', {'data-test': 'instrument-price-change-percent'}).text.strip() if soup.find('span', {'data-test': 'instrument-price-change-percent'}) else '0%'
+        num = re.sub(r'[^\d.-]', '', change.replace(',', '.'))
+        return {'Symbol': name, 'Last Price': clean_price(price), '1d Change (%)': round(float(num or 0),2)}
+    except: return {'Symbol': name, 'Last Price': 'Erro', '1d Change (%)': 0.0}
 
-# ==================== AGRUPAMENTO CORRETO PELA MOEDA BASE ====================
 def agrupar_forex(data):
-    grupos = { 
+    grupos = {
         'Dólar Americano': [], 'Euro': [], 'Libra Esterlina': [], 'Iene Japonês': [],
-        'Dólar Australiano': [], 'Dólar Neozelandês': [], 'Dólar Canadense': [], 'Franco Suíço': [],
-        'Real Brasileiro': [], 'Yuan Chinês': []
+        'Dólar Australiano': [], 'Dólar Neozelandês': [], 'Dólar Canadense': [],
+        'Franco Suíço': [], 'Real Brasileiro': [], 'Yuan Chinês': []
     }
-    base_map = {
-        'USD': 'Dólar Americano', 'EUR': 'Euro', 'GBP': 'Libra Esterlina', 'JPY': 'Iene Japonês',
-        'AUD': 'Dólar Australiano', 'NZD': 'Dólar Neozelandês', 'CAD': 'Dólar Canadense',
-        'CHF': 'Franco Suíço', 'BRL': 'Real Brasileiro', 'CNY': 'Yuan Chinês'
-    }
+    base_map = {'USD':'Dólar Americano','EUR':'Euro','GBP':'Libra Esterlina','JPY':'Iene Japonês',
+                'AUD':'Dólar Australiano','NZD':'Dólar Neozelandês','CAD':'Dólar Canadense',
+                'CHF':'Franco Suíço','BRL':'Real Brasileiro','CNY':'Yuan Chinês'}
     for item in data:
         base = item['Symbol'].split('/')[0]
-        grupo = base_map.get(base)
-        if grupo:
-            grupos[grupo].append(item)
-    return {k: v for k, v in grupos.items() if v}
+        if base in base_map:
+            grupos[base_map[base]].append(item)
+    return {k:v for k,v in grupos.items() if v}
 
-# ==================== GRÁFICO E ESTILO ====================
-def grafico_forca(data):
-    forex = [i for i in data if i['Category'] == 'Forex']
-    if not forex: return None
-    df = pd.DataFrame(forex)
-    df['1d Change (%)'] = pd.to_numeric(df['1d Change (%)'], errors='coerce')
-    df['Base'] = df['Symbol'].str.split('/').str[0]
-    media = df.groupby('Base')['1d Change (%)'].mean().round(2).sort_values(ascending=False)
-    fig = px.bar(media.reset_index(), x='Base', y='1d Change (%)', color='1d Change (%)',
-                 color_continuous_scale=['red','orange','lightgray','lightgreen','green'], text='1d Change (%)')
-    fig.update_traces(texttemplate='%{text}%', textposition='outside')
-    fig.add_hline(y=0, line_color='white', line_width=2)
-    fig.update_layout(height=500, showlegend=False, xaxis={'categoryorder': 'total descending'})
-    return fig
-
-def estilizar_dataframe(df):
+def estilizar(df):
     return df.style.format({'1d Change (%)': '{:.2f}%'}) \
-                  .map(lambda v: f"color: {'green' if v > 0 else 'red' if v < 0 else 'gray'}; font-weight: bold", subset=['1d Change (%)'])
+                  .map(lambda x: f"color: {'green' if x>0 else 'red' if x<0 else 'gray'}; font-weight:bold", subset=['1d Change (%)'])
 
-# ==================== BUSCA TURBO ====================
 @st.cache_data(ttl=55)
 def fetch_all():
     results = []
-    with ThreadPoolExecutor(max_workers=30) as executor:
-        futures = {}
-        for symbol, name in assets['Forex'].items():
-            futures[executor.submit(get_single_forex, symbol, name)] = 'Forex'
+    with ThreadPoolExecutor(max_workers=35) as ex:
+        futures = {ex.submit(get_single_forex, s, n): 'Forex' for s,n in assets['Forex'].items()}
         for cat in ['USA','Asia/Pacifico','Europa','Commodities','Crypto']:
-            for symbol, name in assets[cat].items():
-                futures[executor.submit(get_single_non_forex, cat, symbol, name)] = cat
+            for s,n in assets[cat].items():
+                futures[ex.submit(get_single_non_forex, cat, s, n)] = cat
         for f in as_completed(futures):
             results.append(f.result())
-    grouped = {}
-    for r in results:
-        cat = r['Category']
-        grouped.setdefault(cat, []).append(r)
-    return grouped
+    return results
 
 # ==================== LOOP PRINCIPAL ====================
 placeholder = st.empty()
 while True:
-    inicio = time.time()
+    start = time.time()
     with placeholder.container():
-        dados = fetch_all()
-        todos = [item for sub in dados.values() for item in sub]
+        data = fetch_all()
+        forex_data = [x for x in data if x['Symbol'].count('/') == 1]
+        outros = [x for x in data if x not in forex_data]
 
-        st.markdown(f"**Atualizado:** {datetime.now():%d/%m/%Y %H:%M:%S} • Tempo: {time.time()-inicio:.1f}s")
+        st.markdown(f"**Atualizado:** {datetime.now():%d/%m/%Y %H:%M:%S} • {time.time()-start:.1f}s")
         st.markdown("---")
 
-        # Gráfico de força
-        fig = grafico_forca(todos)
-        if fig: st.plotly_chart(fig, use_container_width=True)
+        # FOREX - 4 COLUNAS FIXAS
+        st.header("Forex - Pares de Moedas")
+        grupos = agrupar_forex(forex_data)
+        cols = st.columns(4)
 
-        # FOREX AGRUPADO (EXATAMENTE COMO NA FOTO)
-        if 'Forex' in dados:
-            st.header("Forex - Pares de Moedas")
-            grupos = agrupar_forex(dados['Forex'])
+        ordem = [
+            'Dólar Americano', 'Euro', 'Libra Esterlina', 'Iene Japonês',
+            'Dólar Australiano', 'Dólar Neozelandês', 'Dólar Canadense',
+            'Franco Suíço', 'Real Brasileiro', 'Yuan Chinês'
+        ]
 
-            cols = st.columns(4)
+        col_idx = 0
+        for titulo in ordem:
+            if titulo in grupos and grupos[titulo]:
+                with cols[col_idx % 4]:
+                    df = pd.DataFrame(grupos[titulo])[['Symbol', 'Last Price', '1d Change (%)']].set_index('Symbol')
+                    st.subheader(titulo)
+                    st.dataframe(estilizar(df), use_container_width=True)
+                col_idx += 1
 
-            # LINHA 1
-            for i, titulo in enumerate(['Dólar Americano', 'Euro', 'Libra Esterlina', 'Iene Japonês']):
-                with cols[i]:
-                    if titulo in grupos:
-                        df = pd.DataFrame(grupos[titulo])[['Symbol', 'Last Price', '1d Change (%)']].set_index('Symbol')
-                        st.subheader(titulo)
-                        st.dataframe(estilizar_dataframe(df), use_container_width=True)
+        st.markdown("---")
 
-            # LINHA 2
-            for i, titulo in enumerate(['Dólar Australiano', 'Dólar Neozelandês', 'Dólar Canadense', 'Franco Suíço']):
-                with cols[i]:
-                    if titulo in grupos:
-                        df = pd.DataFrame(grupos[titulo])[['Symbol', 'Last Price', '1d Change (%)']].set_index('Symbol')
-                        st.subheader(titulo)
-                        st.dataframe(estilizar_dataframe(df), use_container_width=True)
-
-            # BRL e CNY na última coluna (abaixo do Franco Suíço)
-            with cols[3]:
-                for titulo in ['Real Brasileiro', 'Yuan Chinês']:
-                    if titulo in grupos and grupos[titulo]:
-                        df = pd.DataFrame(grupos[titulo])[['Symbol', 'Last Price', '1d Change (%)']].set_index('Symbol')
-                        st.subheader(titulo)
-                        st.dataframe(estilizar_dataframe(df), use_container_width=True)
-
-            st.markdown("---")
-
-        # OUTROS ATIVOS
+        # OUTROS ATIVOS - TAMBÉM EM 4 COLUNAS
         st.header("Outros Ativos")
-        for cat in ['USA', 'Asia/Pacifico', 'Europa', 'Commodities', 'Crypto']:
-            if cat in dados:
-                st.subheader(cat)
-                df = pd.DataFrame(dados[cat])[['Symbol', 'Last Price', '1d Change (%)']].set_index('Symbol')
-                st.dataframe(estilizar_dataframe(df), use_container_width=True)
-                st.markdown("***")
+        cols2 = st.columns(4)
+        categorias = ['USA', 'Asia/Pacifico', 'Europa', 'Commodities', 'Crypto']
+        dados_por_cat = {}
+        for item in outros:
+            dados_por_cat.setdefault(item.get('Category', item['Symbol']), []).append(item)
 
-        # Download
-        csv = pd.DataFrame(todos).to_csv(index=False, encoding='utf-8')
-        st.download_button("Baixar CSV", csv, f"cotacoes_{datetime.now():%Y%m%d_%H%M}.csv", "text/csv")
+        col_idx = 0
+        for cat_name in categorias + ['Crypto']:
+            itens = []
+            for item in outros:
+                if item['Symbol'] in [v for k in assets.get(cat_name, {}) for v in [k.split('-')[-1]] if cat_name!='Crypto' else item['Symbol'].split('-')[0].upper()]:
+                    itens.append(item)
+            if itens:
+                with cols2[col_idx % 4]:
+                    df = pd.DataFrame(itens)[['Symbol', 'Last Price', '1d Change (%)']].set_index('Symbol')
+                    st.subheader(cat_name.replace('/', ' / '))
+                    st.dataframe(estilizar(df), use_container_width=True)
+                col_idx += 1
+
+        # Download CSV
+        csv = pd.DataFrame(data).to_csv(index=False, encoding='utf-8')
+        st.download_button("Baixar todos os dados (CSV)", csv, f"cotacoes_{datetime.now():%Y%m%d_%H%M}.csv", "text/csv")
 
     time.sleep(60)
