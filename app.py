@@ -211,7 +211,7 @@ def fetch_all():
 def carregar_noticias_frescas():
     global vistas
     novas = []
-feeds = [
+    feeds = [
     "https://br.investing.com/rss/market_overview_Technical.rss",
     "https://br.investing.com/rss/stock.rss",
     "https://bmcnews.com.br/feed/",
@@ -237,7 +237,7 @@ feeds = [
     "https://www.seudinheiro.com/feed/",
     "https://www.barchart.com/news/authors/rss",
     "https://feeds.feedburner.com/barchartnews"
-]
+    ]
     for url in feeds:
         try:
             feed = feedparser.parse(url)
@@ -352,4 +352,5 @@ while True:
         )
 
     time.sleep(60)
+
 
