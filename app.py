@@ -45,7 +45,7 @@ if not os.path.exists(".streamlit"):
        os.makedirs(".streamlit", exist_ok=True)
 
 def carregar_vistas():
-    if os.path.exists(CACHE_FILE):
+    if os.path.exists(CACHE_FILE):
         try:
             with open(CACHE_FILE, "r", encoding="utf-8") as f:
                 return set(json.load(f))
@@ -373,5 +373,6 @@ while True:
         )
 
     time.sleep(60)
+
 
 
