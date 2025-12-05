@@ -1,4 +1,4 @@
-# app.py — VERSÃO FINAL PERFEITA: 3 COLUNAS + NOTÍCIAS NO TOPO DA SIDEBAR
+# app.py — DASHBOARD FINAL PERFEITO: COTAÇÕES + NOTÍCIAS NA SIDEBAR
 import streamlit as st
 import requests
 import re
@@ -31,16 +31,10 @@ st.markdown("""
         border-bottom: 1px solid #30363d;
         transition: all 0.2s;
     }
-    .news-item:hover { background-color: #21262d; padding-left: 18px; }
-    .news-title a { 
-        color: #58a6ff; 
-        text-decoration: none; 
-        font-weight: 600; 
-        font-size: 15px; 
-        line-height: 1.4;
-    }
-    .news-title a:hover { color: #79c0ff; text-decoration: underline; }
-    .news-meta { font-size: 12px; color: #8b949e; margin-top: 6px; }
+    .news-item:hover { background:#21262d; padding-left:18px; }
+    .news-title a { color:#58a6ff; text-decoration:none; font-weight:600; font-size:15px; line-height:1.4; }
+    .news-title a:hover { color:#79c0ff; text-decoration:underline; }
+    .news-meta { font-size:12px; color:#8b949e; margin-top:6px; }
     .stDataFrame { width: 100% !important; }
     [data-testid="column"] { padding: 8px !important; }
 </style>
@@ -69,7 +63,7 @@ def salvar_vistas(vistas):
 
 vistas = carregar_vistas()
 
-# ====================== ATIVOS (completo) ======================
+# ====================== TODOS OS ATIVOS ======================
 assets = {
     'Forex': {
         'eur-usd': 'Euro/US Dollar', 'gbp-usd': 'British Pound/US Dollar', 'usd-jpy': 'US Dollar/Japanese Yen',
@@ -107,7 +101,7 @@ assets = {
     'Crypto': {'btc-usd': 'Bitcoin', 'eth-usd': 'Ethereum'}
 }
 
-# ====================== FUNÇÕES (todas funcionando) ======================
+# ====================== FUNÇÕES DE COTAÇÕES ======================
 def clean_price(p):
     if not p or p in ['N/D', '-']: return 'N/D'
     p = p.replace(',', '.')
@@ -135,35 +129,43 @@ def get_single_forex(symbol, _):
 def get_single_non_forex(category, symbol, name):
     if symbol == 'usdollar':
         url = 'https://br.investing.com/indices/usdollar'
-    elif symbol in ['btc-usd', 'eth-usd']:
-        url = f'https://br.investing.com/crypto/{symbol.split("-")[0]}/{symbol.split("-")[1]}'
-    elif category in ['USA', 'Asia/Pacifico', 'Europa']:
+    elif symbol == 'btc-usd':
+        url = 'https://br.investing.com/crypto/bitcoin/btc-usd'
+    elif symbol == 'eth-usd':
+        url = 'https://br.investing.com/crypto/ethereum/eth-usd'
+    elif '-futures' in symbol:
         url = f'https://br.investing.com/indices/{symbol}'
-    else:
+    elif category == 'Commodities':
         url = f'https://br.investing.com/commodities/{symbol}'
-    
+    else:
+        url = f'https://br.investing.com/indices/{symbol}'
+
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
     try:
-        r = requests.get(url, headers=headers, timeout=20)
+        r = requests.get(url, headers=headers, timeout=25)
         soup = BeautifulSoup(r.text, 'html.parser')
-        price = soup.find('div', {'data-test': 'instrument-price-last'})
-        change = soup.find('span', {'data-test': 'instrument-price-change-percent'})
-        if not price or not change:
+        price_elem = soup.find('div', {'data-test': 'instrument-price-last'})
+        change_elem = soup.find('span', {'data-test': 'instrument-price-change-percent'})
+        if not price_elem or not change_elem:
             return {'Symbol': name, 'Last Price': 'N/D', '1d Change (%)': 0.0}
-        price_txt = price.text.strip()
-        change_txt = change.text.strip()
-        num = re.sub(r'[d.-]', '', change_txt.replace(',', '.'))
-        return {'Symbol': name, 'Last Price': clean_price(price_txt), '1d Change (%)': round(float(num or 0), 2)}
+        price = price_elem.text.strip()
+        change_text = change_elem.text.strip()
+        num = re.sub(r'[^\d.-]', '', change_text.replace(',', '.'))
+        return {'Symbol': name, 'Last Price': clean_price(price), '1d Change (%)': round(float(num or 0), 2)}
     except:
         return {'Symbol': name, 'Last Price': 'Erro', '1d Change (%)': 0.0}
 
 def agrupar_forex(data):
-    grupos = { 'Dólar Americano': [], 'Euro': [], 'Libra Esterlina': [], 'Iene Japonês': [],
+    grupos = {
+        'Dólar Americano': [], 'Euro': [], 'Libra Esterlina': [], 'Iene Japonês': [],
         'Dólar Australiano': [], 'Dólar Neozelandês': [], 'Dólar Canadense': [],
-        'Franco Suíço': [], 'Real Brasileiro': [], 'Yuan Chinês': [] }
-    base_map = { 'USD': 'Dólar Americano', 'EUR': 'Euro', 'GBP': 'Libra Esterlina', 'JPY': 'Iene Japonês',
+        'Franco Suíço': [], 'Real Brasileiro': [], 'Yuan Chinês': []
+    }
+    base_map = {
+        'USD': 'Dólar Americano', 'EUR': 'Euro', 'GBP': 'Libra Esterlina', 'JPY': 'Iene Japonês',
         'AUD': 'Dólar Australiano', 'NZD': 'Dólar Neozelandês', 'CAD': 'Dólar Canadense',
-        'CHF': 'Franco Suíço', 'BRL': 'Real Brasileiro', 'CNY': 'Yuan Chinês' }
+        'CHF': 'Franco Suíço', 'BRL': 'Real Brasileiro', 'CNY': 'Yuan Chinês'
+    }
     for item in data:
         if '/' in item['Symbol']:
             base = item['Symbol'].split('/')[0]
@@ -210,7 +212,7 @@ def fetch_all():
     unique = [r for r in results if r['Symbol'] not in seen and not seen.add(r['Symbol'])]
     return unique
 
-# ====================== NOTÍCIAS (MAIS NOVAS NO TOPO) ======================
+# ====================== NOTÍCIAS — MAIS NOVAS NO TOPO ======================
 @st.cache_data(ttl=60, show_spinner=False)
 def carregar_noticias():
     global vistas
@@ -222,26 +224,30 @@ def carregar_noticias():
         "https://www.seudinheiro.com/feed/",
         "https://br.investing.com/rss/news.rss",
         "https://einvestidor.estadao.com.br/feed/",
+        "https://investnews.com.br/feed/",
     ]
     for url in feeds:
         try:
             feed = feedparser.parse(url)
-            for entry in feed.entries[:12]:
+            for entry in feed.entries[:15]:
                 link = entry.link.strip()
                 if link in vistas: continue
                 titulo = entry.title.strip()
                 try:
-                    if any(kw in titulo.lower() for kw in ["fed", "cpi", "powell", "ecb"]):
+                    if any(kw in titulo.lower() for kw in ["fed", "cpi", "powell", "ecb", "rate", "inflation"]):
                         titulo = GoogleTranslator(source='en', target='pt').translate(titulo)
                 except: pass
-                data = entry.get('published', 'Agora')[:16].replace('T', ' ')
+                data_raw = entry.get('published') or entry.get('updated') or ""
+                try:
+                    data = datetime.strptime(data_raw[:19], "%Y-%m-%dT%H:%M:%S").strftime("%d/%m %H:%M")
+                except:
+                    data = "Agora"
                 fonte = feed.feed.get('title', 'Fonte').split('-')[0].strip()
-                novas.append({'titulo': titulo, 'link': link, 'fonte': fonte, 'data': data})
+                novas.append({'titulo': titulo, 'link': link, 'fonte': fonte, 'data': data, 'ts': time.time()})
                 vistas.add(link)
         except: continue
     salvar_vistas(vistas)
-    # ORDENA POR DATA (MAIS NOVA PRIMEIRO)
-    novas.sort(key=lambda x: x['data'], reverse=True)
+    novas.sort(key=lambda x: x['ts'], reverse=True)  # MAIS NOVA NO TOPO!
     return novas[:20]
 
 # ====================== LOOP PRINCIPAL ======================
@@ -251,7 +257,7 @@ tz_brasil = timedelta(hours=-3)
 while True:
     inicio = time.time()
 
-    # === SIDEBAR COM NOTÍCIAS (MAIS NOVAS NO TOPO!) ===
+    # === SIDEBAR: NOTÍCIAS (MAIS NOVAS NO TOPO) ===
     noticias = carregar_noticias()
     with st.sidebar:
         st.markdown("<h2 style='color:#58a6ff;text-align:center;'>Notícias ao Vivo</h2>", unsafe_allow_html=True)
@@ -259,7 +265,7 @@ while True:
             st.info("Carregando...")
         else:
             st.success(f"{len(noticias)} novas")
-            for n in noticias:  # já vem ordenado!
+            for n in noticias:
                 st.markdown(f"""
                 <div class="news-item">
                     <div class="news-title"><a href="{n['link']}" target="_blank">{n['titulo']}</a></div>
@@ -269,7 +275,7 @@ while True:
         st.markdown("---")
         st.caption("Atualiza a cada minuto")
 
-    # === CONTEÚDO PRINCIPAL (3 COLUNAS!) ===
+    # === CONTEÚDO PRINCIPAL ===
     with placeholder.container():
         dados = fetch_all()
         agora = datetime.now() + tz_brasil
@@ -284,26 +290,26 @@ while True:
             st.plotly_chart(fig, use_container_width=True)
             st.markdown("---")
 
-        # Forex — AGORA COM 3 COLUNAS
+        # Forex — 3 COLUNAS
         st.markdown("<h2 style='color:#79c0ff;'>Forex - Pares de Moedas</h2>", unsafe_allow_html=True)
         forex_data = [x for x in dados if '/' in x['Symbol']]
         grupos = agrupar_forex(forex_data)
-        cols = st.columns(3)  # MUDOU DE 4 PARA 3!
+        cols = st.columns(3)
         ordem = ['Dólar Americano', 'Euro', 'Libra Esterlina', 'Iene Japonês', 'Dólar Australiano', 'Dólar Neozelandês', 'Dólar Canadense', 'Franco Suíço', 'Real Brasileiro', 'Yuan Chinês']
         i = 0
         for titulo in ordem:
             if titulo in grupos and grupos[titulo]:
-                with cols[i % 3]:  # 3 colunas!
+                with cols[i % 3]:
                     df = pd.DataFrame(grupos[titulo])[ ['Symbol','Last Price','1d Change (%)'] ].set_index('Symbol')
                     st.subheader(titulo)
                     st.dataframe(estilizar(df), use_container_width=True)
                 i += 1
         st.markdown("---")
 
-        # Outros ativos — TAMBÉM COM 3 COLUNAS
+        # Outros ativos — 3 COLUNAS
         st.markdown("<h2 style='color:#79c0ff;'>Outros Ativos</h2>", unsafe_allow_html=True)
         outros = [x for x in dados if '/' not in x['Symbol']]
-        cols2 = st.columns(3)  # 3 colunas!
+        cols2 = st.columns(3)
         cats = {'USA':[], 'Asia/Pacifico':[], 'Europa':[], 'Commodities':[], 'Crypto':[]}
         for item in outros:
             for c, itens in assets.items():
