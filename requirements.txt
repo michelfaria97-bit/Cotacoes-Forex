@@ -3,4 +3,6 @@ requests
 beautifulsoup4
 pandas
 plotly
+feedparser
+deep-translator
 lxml
