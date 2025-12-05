@@ -235,9 +235,7 @@ def fetch_all():
 
 # ====================== NOTÍCIAS — FORÇANDO ORDEM CORRETA (TUDO) ======================
 def carregar_noticias_frescas():
-    global vistas
-    novas = []
-    feeds = [
+    [
     "https://br.investing.com/rss/market_overview_Technical.rss",
     "https://br.investing.com/rss/stock.rss",
     "https://bmcnews.com.br/feed/",
@@ -266,13 +264,12 @@ def carregar_noticias_frescas():
     "https://feeds.feedburner.com/barchartnews"
     ]
     for url in feeds:
-        try:
-            feed = feedparser.parse(url)
-            for entry in feed.entries: # Pega todas as notícias do feed (sem limite [:12])
-                link = entry.link.strip()
-                if link in vistas: continue
-                titulo = entry.title.strip()
-                
+            try:
+                feed = feedparser.parse(url)
+                for entry in feed.entries:
+                    link = entry.link.strip()
+                    titulo = entry.title.strip()
+                    
                 # Lógica de Tradução Melhorada:
                 try:
                     if any(kw in url for kw in ["investing.com/rss/news.rss", "zerohedge", "barchart"]) or \
@@ -280,25 +277,43 @@ def carregar_noticias_frescas():
                         titulo = GoogleTranslator(source='en', target='pt').translate(titulo)
                 except: pass
                 
-                data_raw = entry.get('published') or entry.get('updated') or ""
-                try:
-                    data = datetime.strptime(data_raw[:19], "%Y-%m-%dT%H:%M:%S").strftime("%d/%m %H:%M")
-                except:
-                    data = "Agora"
-                fonte = feed.feed.get('title', 'Fonte').split('-')[0].strip()
-                novas.append({
-                    'titulo': titulo,
-                    'link': link,
-                    'fonte': fonte,
-                    'data': data,
-                    'timestamp': time.time()  # GARANTE ORDEM CORRETA
-                })
-                vistas.add(link)
-        except: continue
-    salvar_vistas(vistas)
-    # ORDENA SEMPRE POR TIMESTAMP DESCENDENTE E LIMITA A 100 NA SIDEBAR
-    novas.sort(key=lambda x: x['timestamp'], reverse=True)
-    return novas[:100]
+                    data_raw = entry.get('published') or entry.get('updated') or ""
+                    try:
+                        data = datetime.strptime(data_raw[:19], "%Y-%m-%dT%H:%M:%S").strftime("%d/%m %H:%M")
+                    except:
+                        data = "Agora"
+                        
+                    fonte = feed.feed.get('title', 'Fonte desconhecida').split('-')[0].strip()
+                    
+                    # Usa o timestamp real do feed quando disponível, senão time.time()
+                    published_time = entry.get('published_parsed') or entry.get('updated_parsed')
+                    if published_time:
+                        ts = time.mktime(published_time)
+                    else:
+                        ts = time.time()
+                        
+                    todas.append({
+                        'titulo': titulo,
+                        'link': link,
+                        'fonte': fonte,
+                        'data': data,
+                        'timestamp': ts
+                    })
+            except:
+                continue
+        
+        # ORDENA TODAS AS NOTÍCIAS DO MUNDO POR DATA REAL (mais nova em cima)
+        todas.sort(key=lambda x: x['timestamp'], reverse=True)
+        
+        # Pega só as 100 mais recentes e atualiza o conjunto de vistas
+        mais_recentes = todas[:100]
+        
+        # Atualiza o set de vistas com essas 100 (para evitar duplicar na próxima)
+        global vistas
+        vistas = {item['link'] for item in mais_recentes}
+        salvar_vistas(vistas)
+        
+        return mais_recentes
 
 # ====================== LOOP PRINCIPAL ======================
 placeholder = st.empty()
@@ -424,5 +439,6 @@ while True:
 
     # Atraso de 60 segundos antes da próxima atualização
     time.sleep(60)
+
 
 
