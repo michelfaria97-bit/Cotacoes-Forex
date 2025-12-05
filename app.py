@@ -241,7 +241,7 @@ def carregar_noticias_frescas():
     for url in feeds:
         try:
             feed = feedparser.parse(url)
-            for entry in feed.entries[:12]:
+            for entry in feed.entries: # <-- MUDANÇA 1: REMOVIDO [:12]
                 link = entry.link.strip()
                 if link in vistas: continue
                 titulo = entry.title.strip()
@@ -267,7 +267,7 @@ def carregar_noticias_frescas():
     salvar_vistas(vistas)
     # ORDENA SEMPRE POR TIMESTAMP DESCENDENTE
     novas.sort(key=lambda x: x['timestamp'], reverse=True)
-    return novas[:20]
+    return novas[:100]
 
 # ====================== LOOP PRINCIPAL ======================
 placeholder = st.empty()
@@ -352,5 +352,6 @@ while True:
         )
 
     time.sleep(60)
+
 
 
