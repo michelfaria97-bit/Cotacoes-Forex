@@ -100,13 +100,13 @@ assets = {
     'Crypto': {'btc-usd': 'Bitcoin', 'eth-usd': 'Ethereum'},
     # MAGNIFICENT 7
     'Mag 7': {
-        'google-inc-c': 'GOOG',
-        'microsoft-corp': 'MSFT',
-        'amazon-com-inc': 'AMZN',
-        'apple-computer-inc': 'AAPL',
-        'facebook-inc': 'META',
-        'nvidia-corp': 'NVDA',
-        'tesla-motors': 'TSLA'
+        'google-inc-c': 'GOOG (Alphabet C)',
+        'microsoft-corp': 'MSFT (Microsoft)',
+        'amazon-com-inc': 'AMZN (Amazon)',
+        'apple-computer-inc': 'AAPL (Apple)',
+        'facebook-inc': 'META (Meta)',
+        'nvidia-corp': 'NVDA (Nvidia)',
+        'tesla-motors': 'TSLA (Tesla)'
     }
 }
 
@@ -146,8 +146,8 @@ def get_single_non_forex(category, symbol, name):
         url = f'https://br.investing.com/indices/{symbol}'
     elif category == 'Commodities':
         url = f'https://br.investing.com/commodities/{symbol}'
-    elif category == 'Mag 7':
-        url = f'https://br.investing.com/equities/{symbol}' # URL de Ações
+    elif category == 'Mag 7': # Corrigido para Ações (Equities)
+        url = f'https://br.investing.com/equities/{symbol}'
     else:
         url = f'https://br.investing.com/indices/{symbol}'
 
@@ -155,28 +155,15 @@ def get_single_non_forex(category, symbol, name):
     try:
         r = requests.get(url, headers=headers, timeout=25)
         soup = BeautifulSoup(r.text, 'html.parser')
-        
-        # Seletores de preço e variação percentual são consistentes em ações/índices
         price_elem = soup.find('div', {'data-test': 'instrument-price-last'})
         change_elem = soup.find('span', {'data-test': 'instrument-price-change-percent'})
-        
         if not price_elem or not change_elem:
             return {'Symbol': name, 'Last Price': 'N/D', '1d Change (%)': 0.0}
-            
         price = price_elem.text.strip()
         change_text = change_elem.text.strip()
-        
-        # Limpeza da variação percentual: 
-        # 1. Remove parênteses
-        # 2. Remove o sinal de porcentagem e substitui vírgula por ponto
-        num = change_text.replace('(', '').replace(')', '').replace('%', '').replace(',', '.')
-        
-        # Garante que só fique o número, tratando possíveis casos de erro na limpeza
-        num = re.sub(r'[^\d.-]', '', num)
-        
+        num = re.sub(r'[^\d.-]', '', change_text.replace(',', '.'))
         return {'Symbol': name, 'Last Price': clean_price(price), '1d Change (%)': round(float(num or 0), 2)}
-    except Exception as e:
-        # print(f"Erro ao buscar {name}: {e}")
+    except:
         return {'Symbol': name, 'Last Price': 'Erro', '1d Change (%)': 0.0}
 
 def agrupar_forex(data):
@@ -235,88 +222,69 @@ def fetch_all():
 
 # ====================== NOTÍCIAS — FORÇANDO ORDEM CORRETA (TUDO) ======================
 def carregar_noticias_frescas():
-    todas = []  # Lista que vai receber TODAS as notícias de todos os feeds
-
+    global vistas
+    novas = []
     feeds = [
-        "https://br.investing.com/rss/market_overview_Technical.rss",
-        "https://br.investing.com/rss/stock.rss",
-        "https://bmcnews.com.br/feed/",
-        "https://www.bloomberglinea.com.br/arc/outboundfeeds/rss.xml",
-        "https://einvestidor.estadao.com.br/feed/",
-        "https://www.infomoney.com.br/feed/",
-        "https://investnews.com.br/feed/",
-        "https://br.advfn.com/jornal/rss",
-        "https://www.infomoney.com.br/mercados/feed/",
-        "https://borainvestir.b3.com.br/noticias/mercado/feed/",
-        "https://www.moneytimes.com.br/mercados/feed/",
-        "https://www.infomoney.com.br/onde-investir/feed/",
-        "https://www.bcb.gov.br/api/feed/sitebcb/sitefeeds/cambio",
-        "https://www.bcb.gov.br/api/feed/sitebcb/sitefeeds/focus",
-        "https://www.bomdiamercado.com.br/feed/",
-        "https://timesbrasil.com.br/feed/",
-        "https://br.investing.com/rss/news.rss",
-        "https://cms.zerohedge.com/fullrss2.xml",
-        "https://cbn.globo.com/rss/cbn/",
-        "https://valor.globo.com/rss/valor",
-        "http://pox.globo.com/rss/valor",
-        "https://pox.globo.com/rss/valorinveste/",
-        "https://www.seudinheiro.com/feed/",
-        "https://www.barchart.com/news/authors/rss",
-        "https://investinglive.com/feed",
-        "https://feeds.feedburner.com/barchartnews"
+    "https://br.investing.com/rss/market_overview_Technical.rss",
+    "https://br.investing.com/rss/stock.rss",
+    "https://bmcnews.com.br/feed/",
+    "https://www.bloomberglinea.com.br/arc/outboundfeeds/rss.xml",
+    "https://einvestidor.estadao.com.br/feed/",
+    "https://www.infomoney.com.br/feed/",
+    "https://investnews.com.br/feed/",
+    "https://br.advfn.com/jornal/rss",
+    "https://www.infomoney.com.br/mercados/feed/",
+    "https://borainvestir.b3.com.br/noticias/mercado/feed/",
+    "https://www.moneytimes.com.br/mercados/feed/",
+    "https://www.infomoney.com.br/onde-investir/feed/",
+    "https://www.bcb.gov.br/api/feed/sitebcb/sitefeeds/cambio",
+    "https://www.bcb.gov.br/api/feed/sitebcb/sitefeeds/focus",
+    "https://www.bomdiamercado.com.br/feed/",
+    "https://timesbrasil.com.br/feed/",
+    "https://br.investing.com/rss/news.rss",
+    "https://cms.zerohedge.com/fullrss2.xml",
+    "https://cbn.globo.com/rss/cbn/",
+    "https://valor.globo.com/rss/valor",
+    "http://pox.globo.com/rss/valor",
+    "https://pox.globo.com/rss/valorinveste/",
+    "https://www.seudinheiro.com/feed/",
+    "https://www.barchart.com/news/authors/rss",
+    "https://feeds.feedburner.com/barchartnews"
     ]
-
     for url in feeds:
         try:
             feed = feedparser.parse(url)
-            for entry in feed.entries:
+            for entry in feed.entries: # Pega todas as notícias do feed (sem limite [:12])
                 link = entry.link.strip()
+                if link in vistas: continue
                 titulo = entry.title.strip()
-
-                # Tradução automática para notícias em inglês (ZeroHedge, Barchart, Investing news, etc.)
+                
+                # Lógica de Tradução Melhorada:
                 try:
                     if any(kw in url for kw in ["investing.com/rss/news.rss", "zerohedge", "barchart"]) or \
-                       any(kw in titulo.lower() for kw in ["fed", "cpi", "powell", "ecb", "rate", "inflation", "stock", "oil", "market", "nasdaq", "dow"]):
+                        any(kw in titulo.lower() for kw in ["fed", "cpi", "powell", "ecb", "rate", "inflation", "stock", "oil", "market"]):
                         titulo = GoogleTranslator(source='en', target='pt').translate(titulo)
-                except:
-                    pass
-
-                # Data bonitinha
+                except: pass
+                
                 data_raw = entry.get('published') or entry.get('updated') or ""
                 try:
                     data = datetime.strptime(data_raw[:19], "%Y-%m-%dT%H:%M:%S").strftime("%d/%m %H:%M")
                 except:
                     data = "Agora"
-
-                # Fonte limpa
-                fonte = feed.feed.get('title', 'Fonte desconhecida').split('-')[0].strip()
-
-                # Timestamp real da notícia (muito mais preciso que time.time())
-                published_time = entry.get('published_parsed') or entry.get('updated_parsed')
-                ts = time.mktime(published_time) if published_time else time.time()
-
-                todas.append({
+                fonte = feed.feed.get('title', 'Fonte').split('-')[0].strip()
+                novas.append({
                     'titulo': titulo,
                     'link': link,
                     'fonte': fonte,
                     'data': data,
-                    'timestamp': ts
+                    'timestamp': time.time()  # GARANTE ORDEM CORRETA
                 })
-        except Exception as e:
-            continue  # se um feed der pau, pula pra próximo
-
-    # Ordena do mais novo pro mais velho
-    todas.sort(key=lambda x: x['timestamp'], reverse=True)
-
-    # Pega só as 100 mais recentes do planeta
-    mais_recentes = todas[:100]
-
-    # Atualiza o conjunto de links já exibidos (evita duplicar na próxima rodada)
-    global vistas
-    vistas = {item['link'] for item in mais_recentes}
+                vistas.add(link)
+        except: continue
     salvar_vistas(vistas)
-
-    return mais_recentes
+    # ORDENA SEMPRE POR TIMESTAMP DESCENDENTE E LIMITA A 100 NA SIDEBAR
+    novas.sort(key=lambda x: x['timestamp'], reverse=True)
+    return novas[:100]
 
 # ====================== LOOP PRINCIPAL ======================
 placeholder = st.empty()
@@ -328,59 +296,21 @@ while True:
     # === SIDEBAR: NOTÍCIAS MAIS NOVAS NO TOPO ===
     noticias = carregar_noticias_frescas()  # função sem cache para forçar atualização
     with st.sidebar:
-        st.markdown(
-            "<h2 style='color:#58a6ff;text-align:center;margin-bottom:20px;'>Notícias ao Vivo</h2>",
-            unsafe_allow_html=True
-        )
-    
-        if not noticias:  # ← ainda carregando ou realmente zero notícias novas
-            st.markdown(
-                """
-                <div style="text-align:center; padding: 30px 10px; color: #8b949e; font-size: 15px;">
-                    <div style="font-size: 40px; margin-bottom: 10px;">Searching</div>
-                    Buscando notícias frescas...<br>
-                    <small>Atualiza automaticamente a cada minuto</small>
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
+        st.markdown("<h2 style='color:#58a6ff;text-align:center;'>Notícias ao Vivo</h2>", unsafe_allow_html=True)
+        if not noticias:
+            st.info("Carregando...")
         else:
-            # === MOSTRA TODAS AS NOTÍCIAS (mais nova sempre no topo) ===
-            for i, n in enumerate(noticias):
-                # Destaque extra forte na PRIMEIRA notícia (a mais nova de todas
-                cor_titulo = "#ffffff" if i == 0 else "#e6edf3"
-                peso_titulo = "700" if i == 0 else "600"
-                tamanho_fonte = "16.5px" if i == 0 else "15.5px"
-    
-                st.markdown(
-                    f"""
-                    <div style="margin-bottom: 18px; padding-bottom: 12px; border-bottom: 1px solid #30363d;">
-                        <div style="font-size:{tamanho_fonte}; font-weight:{peso_titulo}; color:{cor_titulo}; line-height:1.3;">
-                            <a href="{n['link']}" target="_blank" style="color:inherit; text-decoration:none;">
-                                {n['titulo']}
-                            </a>
-                        </div>
-                        <div style="font-size:13px; color:#8b949e; margin-top:6px;">
-                            {n['fonte']} • {n['data']}
-                        </div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
+            st.success(f"{len(noticias)} novas")
+            for n in noticias:
+                st.markdown(f"""
+                <div class="news-item">
+                    <div class="news-title"><a href="{n['link']}" target="_blank">{n['titulo']}</a></div>
+                    <div class="news-meta">{n['fonte']} • {n['data']}</div>
+                </div>
+                """, unsafe_allow_html=True)
+        st.markdown("---")
+        st.caption("Atualiza a cada minuto")
 
-        # === CONTADOR VERDE BONITÃO SEMPRE NO FINAL ===
-        st.markdown(
-            f"""
-            <div style="background:#238636; color:white; padding:10px 14px; border-radius:8px; 
-                        text-align:center; font-weight:600; font-size:15px; margin: 20px 0 10px 0;">
-                {len(noticias)} novas
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-    # Rodapé discreto
-    st.caption("Atualiza a cada minuto")
     # === CONTEÚDO PRINCIPAL ===
     with placeholder.container():
         dados = fetch_all()
@@ -440,9 +370,4 @@ while True:
             key=f"dl_{int(time.time())}"
         )
 
-    # Atraso de 60 segundos antes da próxima atualização
     time.sleep(60)
-
-
-
-
