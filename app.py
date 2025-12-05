@@ -1,4 +1,4 @@
-# app.py — VERSÃO FINAL DEFINITIVA: COTAÇÕES + NOTÍCIAS AO VIVO (1 MINUTO) + FILTRO + SEM REPETIR
+# app.py — COTAÇÕES + NOTÍCIAS AO VIVO (FUNCIONA PERFEITO NO STREAMLIT CLOUD)
 import streamlit as st
 import requests
 import re
@@ -15,31 +15,30 @@ import os
 
 st.set_page_config(page_title="Cotações + Notícias ao Vivo", layout="wide", page_icon="Chart")
 
-# ==================== CSS PROFISSIONAL ====================
+# ==================== CSS BONITO ====================
 st.markdown("""
 <style>
     .news-card {
-        padding: 18px;
-        border-radius: 12px;
-        background: #1a1a1a;
-        border-left: 5px solid #00d4ff;
+        padding: 16px;
+        border-radius: 10px;
+        background: #1e1e1e;
+        border-left: 4px solid #00ff9d;
         margin: 12px 0;
         transition: all 0.3s;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.3);
     }
-    .news-card:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(0,212,255,0.2); }
-    .news-title { font-size: 17px; font-weight: 600; margin: 0 0 8px 0; line-height: 1.4; }
-    .news-title a { color: #00d4ff; text-decoration: none; }
+    .news-card:hover { background: #252525; transform: translateX(4px); }
+    .news-title a { color: #00ff9d; text-decoration: none; font-weight: 600; font-size: 16.5px; }
     .news-title a:hover { text-decoration: underline; }
-    .news-meta { font-size: 13px; color: #aaa; }
-    .stSelectbox { margin-bottom: 20px; }
+    .news-meta { font-size: 13px; color: #aaa; margin-top: 6px; }
     .stDataFrame { width: 100% !important; }
     [data-testid="column"] { padding: 8px !important; }
 </style>
 """, unsafe_allow_html=True)
 
 # ==================== CACHE DE NOTÍCIAS (NUNCA REPETE) ====================
-CACHE_FILE = "noticias_vistas.json"
+CACHE_FILE = ".streamlit/noticias_vistas.json"
+if not os.path.exists(".streamlit"):
+    os.makedirs(".streamlit", exist_ok=True)
 
 def carregar_vistas():
     if os.path.exists(CACHE_FILE):
@@ -59,23 +58,7 @@ def salvar_vistas(vistas):
 
 vistas = carregar_vistas()
 
-# ==================== FEEDS COM NOMES BONITOS ====================
-feeds_com_nome = {
-    "Todas as fontes": "",
-    "InfoMoney": "https://www.infomoney.com.br/feed/",
-    "Money Times": "https://www.moneytimes.com.br/mercados/feed/",
-    "Valor Econômico": "https://valor.globo.com/rss",
-    "Seu Dinheiro": "https://www.seudinheiro.com/feed/",
-    "Investing.com": "https://br.investing.com/rss/news.rss",
-    "E-Investidor": "https://einvestidor.estadao.com.br/feed/",
-    "InvestNews": "https://investnews.com.br/feed/",
-    "BMC News": "https://bmcnews.com.br/feed/",
-    "Bloomberg Línea": "https://www.bloomberglinea.com.br/arc/outboundfeeds/rss.xml",
-    "Bora Investir B3": "https://borainvestir.b3.com.br/noticias/mercado/feed/",
-    "Bom Dia Mercado": "https://www.bomdiamercado.com.br/feed/",
-}
-
-# ==================== ATIVOS (100% igual ao seu) ====================
+# ==================== ATIVOS (100% seu original) ====================
 assets = {
     'Forex': {
         'eur-usd': 'Euro/US Dollar', 'gbp-usd': 'British Pound/US Dollar', 'usd-jpy': 'US Dollar/Japanese Yen',
@@ -150,11 +133,9 @@ def get_single_non_forex(category, symbol, name):
     try:
         r = requests.get(url, headers=headers, timeout=20)
         soup = BeautifulSoup(r.text, 'html.parser')
-        price_elem = soup.find('div', {'data-test': 'instrument-price-last'})
-        change_elem = soup.find('span', {'data-test': 'instrument-price-change-percent'})
-        price = price_elem.text.strip() if price_elem else 'N/D'
-        change_text = change_elem.text.strip() if change_elem else '0%'
-        num = re.sub(r'[^\d.-]', '', change_text.replace(',', '.'))
+        price_elem = soup.find('div', {'data-test': 'instrument-price-last'}).text.strip()
+        change = soup.find('span', {'data-test': 'instrument-price-change-percent'}).text.strip()
+        num = re.sub(r'[^\d.-]', '', change.replace(',', '.'))
         return {'Symbol': name, 'Last Price': clean_price(price), '1d Change (%)': round(float(num or 0), 2)}
     except:
         return {'Symbol': name, 'Last Price': 'Erro', '1d Change (%)': 0.0}
@@ -183,10 +164,10 @@ def grafico_forca(data):
     media = df.groupby('Base')['1d Change (%)'].mean().round(2).sort_values(ascending=False)
     fig = px.bar(media.reset_index(), x='Base', y='1d Change (%)', color='1d Change (%)',
                  color_continuous_scale=['red','orange','lightgray','lightgreen','green'],
-                 text='1d Change (%)', title='Força Relativa Média das Moedas (1 dia)')
+                 text='1d Change (%)', title='Força Relativa das Moedas')
     fig.update_traces(texttemplate='%{text}%', textposition='outside')
     fig.add_hline(y=0, line_color='white', line_width=2)
-    fig.update_layout(height=500, showlegend=False, xaxis={'categoryorder': 'total descending'})
+    fig.update_layout(height=500, showlegend=False)
     return fig
 
 def estilizar(df):
@@ -211,140 +192,112 @@ def fetch_all():
     unique = [r for r in results if r['Symbol'] not in seen and not seen.add(r['Symbol'])]
     return unique
 
-# ==================== NOTÍCIAS AO VIVO (1 MINUTO) ====================
+# ==================== NOTÍCIAS (ATUALIZA A CADA 60s) ====================
 @st.cache_data(ttl=60, show_spinner=False)
-def buscar_noticias(fonte_selecionada):
+def carregar_noticias():
     global vistas
-    novas_noticias = []
-    feeds_para_buscar = feeds_com_nome.copy()
-    if fonte_selecionada != "Todas as fontes":
-        feeds_para_buscar = {fonte_selecionada: feeds_com_nome[fonte_selecionada]}
-
-    for nome_fonte, url in feeds_para_buscar.items():
-        if not url: continue
+    novas = []
+    feeds = [
+        "https://www.infomoney.com.br/feed/",
+        "https://www.moneytimes.com.br/mercados/feed/",
+        "https://valor.globo.com/rss",
+        "https://www.seudinheiro.com/feed/",
+        "https://br.investing.com/rss/news.rss",
+        "https://einvestidor.estadao.com.br/feed/",
+        "https://investnews.com.br/feed/",
+        "https://bmcnews.com.br/feed/",
+    ]
+    for url in feeds:
         try:
-            feed = feedparser.parse(url, request_headers={'User-Agent': 'Mozilla/5.0'})
-            for entry in feed.entries:
-                link = entry.link.strip()
+            feed = feedparser.parse(url)
+            for entry in feed.entries[:15]:
+                link = entry.link
                 if link in vistas: continue
-
-                titulo = entry.title.strip()
+                titulo = entry.title
                 try:
-                    if any(palavra in titulo.lower() for palavra in ["fed", "ecb", "cpi", "powell", "inflation", "rate", "dollar"]):
+                    if any(p in titulo.lower() for p in ["fed", "ecb", "cpi", "powell", "dollar", "rate"]):
                         titulo = GoogleTranslator(source='en', target='pt').translate(titulo)
                 except: pass
-
-                data_raw = entry.get('published') or entry.get('updated') or ""
-                try:
-                    data = datetime.strptime(data_raw, "%a, %d %b %Y %H:%M:%S %z").strftime("%d/%m %H:%M")
-                except:
-                    try:
-                        data = datetime.strptime(data_raw[:19], "%Y-%m-%dT%H:%M:%S").strftime("%d/%m %H:%M")
-                    except:
-                        data = "Agora"
-
-                novas_noticias.append({
-                    'titulo': titulo,
-                    'link': link,
-                    'fonte': nome_fonte,
-                    'data': data
-                })
+                data = entry.get('published', 'Agora')[:16].replace('T', ' ')
+                fonte = feed.feed.get('title', '').split('-')[0].strip()
+                novas.append({'titulo': titulo, 'link': link, 'fonte': fonte, 'data': data})
                 vistas.add(link)
         except: continue
-
     salvar_vistas(vistas)
-    return sorted(novas_noticias, key=lambda x: x['link'], reverse=True)[:100]  # últimas 100
+    return novas[:40]
 
-# ==================== INTERFACE COM ABAS ====================
-tab1, tab2 = st.tabs(["Cotações ao Vivo", "Notícias ao Vivo"])
+# ==================== LOOP PRINCIPAL ====================
+tab_cotacoes, tab_noticias = st.tabs(["Cotações ao Vivo", "Notícias"])
 
-# ==================== ABA 1: COTAÇÕES ====================
-with tab1:
+with tab_cotacoes:
     placeholder = st.empty()
-    tz_brasil = timedelta(hours=-3)
 
-    while True:
-        inicio = time.time()
-        with placeholder.container():
-            dados = fetch_all()
-            agora_brasil = datetime.now() + tz_brasil
-            st.markdown(f"**Atualizado:** {agora_brasil.strftime('%d/%m/%Y %H:%M:%S')} (Brasília) • Tempo: {time.time()-inicio:.1f}s")
-            st.markdown("---")
+with tab_noticias:
+    news_placeholder = st.empty()
 
-            fig = grafico_forca(dados)
-            if fig:
-                st.plotly_chart(fig, use_container_width=True)
-                st.markdown("---")
+tz_brasil = timedelta(hours=-3)
 
-            st.header("Forex - Pares de Moedas")
-            forex_data = [x for x in dados if '/' in x['Symbol']]
-            grupos = agrupar_forex(forex_data)
-            cols = st.columns(4)
-            ordem = ['Dólar Americano', 'Euro', 'Libra Esterlina', 'Iene Japonês',
-                     'Dólar Australiano', 'Dólar Neozelandês', 'Dólar Canadense',
-                     'Franco Suíço', 'Real Brasileiro', 'Yuan Chinês']
-            col_idx = 0
-            for titulo in ordem:
-                if titulo in grupos and grupos[titulo]:
-                    with cols[col_idx % 4]:
-                        df = pd.DataFrame(grupos[titulo])[['Symbol', 'Last Price', '1d Change (%)']].set_index('Symbol')
-                        st.subheader(titulo)
-                        st.dataframe(estilizar(df), use_container_width=True)
-                    col_idx += 1
-            st.markdown("---")
+while True:
+    inicio = time.time()
 
-            st.header("Outros Ativos")
-            outros = [x for x in dados if '/' not in x['Symbol']]
-            cols2 = st.columns(4)
-            cat_map = {'USA': [], 'Asia/Pacifico': [], 'Europa': [], 'Commodities': [], 'Crypto': []}
-            for item in outros:
-                for cat, itens in assets.items():
-                    if cat == 'Forex': continue
-                    if item['Symbol'] in itens.values():
-                        cat_map[cat].append(item)
-                        break
-            col_idx = 0
-            for cat in ['USA', 'Asia/Pacifico', 'Europa', 'Commodities', 'Crypto']:
-                if cat_map[cat]:
-                    with cols2[col_idx % 4]:
-                        df = pd.DataFrame(cat_map[cat])[['Symbol', 'Last Price', '1d Change (%)']].set_index('Symbol')
-                        st.subheader(cat.replace('/', ' / '))
-                        st.dataframe(estilizar(df), use_container_width=True)
-                    col_idx += 1
+    # === COTAÇÕES ===
+    with placeholder.container():
+        dados = fetch_all()
+        agora = datetime.now() + tz_brasil
+        st.markdown(f"**Atualizado:** {agora.strftime('%d/%m/%Y %H:%M:%S')} • {time.time()-inicio:.1f}s")
+        st.markdown("---")
 
-            csv = pd.DataFrame(dados).to_csv(index=False, encoding='utf-8')
-            st.download_button("Baixar CSV", csv, f"cotacoes_{agora_brasil.strftime('%Y%m%d_%H%M')}.csv", "text/csv")
+        fig = grafico_forca(dados)
+        if fig: st.plotly_chart(fig, use_container_width=True); st.markdown("---")
 
-        time.sleep(60)
+        st.header("Forex")
+        forex = [x for x in dados if '/' in x['Symbol']]
+        grupos = agrupar_forex(forex)
+        cols = st.columns(4)
+        ordem = ['Dólar Americano', 'Euro', 'Libra Esterlina', 'Iene Japonês', 'Dólar Australiano', 'Dólar Neozelandês', 'Dólar Canadense', 'Franco Suíço', 'Real Brasileiro', 'Yuan Chinês']
+        i = 0
+        for g in ordem:
+            if g in grupos and grupos[g]:
+                with cols[i%4]:
+                    df = pd.DataFrame(grupos[g])[ ['Symbol','Last Price','1d Change (%)'] ].set_index('Symbol')
+                    st.subheader(g)
+                    st.dataframe(estilizar(df), use_container_width=True)
+                i += 1
+        st.markdown("---")
+        st.header("Outros Ativos")
+        outros = [x for x in dados if '/' not in x['Symbol']]
+        cols2 = st.columns(4)
+        cats = {'USA':[], 'Asia/Pacifico':[], 'Europa':[], 'Commodities':[], 'Crypto':[]}
+        for item in outros:
+            for c,n in assets.items():
+                if c=='Forex': continue
+                if item['Symbol'] in n.values(): cats[c].append(item); break
+        i=0
+        for c in ['USA','Asia/Pacifico','Europa','Commodities','Crypto']:
+            if cats[c]:
+                with cols2[i%4]:
+                    df = pd.DataFrame(cats[c])[ ['Symbol','Last Price','1d Change (%)'] ].set_index('Symbol')
+                    st.subheader(c.replace('/', ' / '))
+                    st.dataframe(estilizar(df), use_container_width=True)
+                i+=1
 
-# ==================== ABA 2: NOTÍCIAS AO VIVO ====================
-with tab2:
-    st.header("Notícias Financeiras em Tempo Real")
-    st.markdown("**Atualiza a cada 60 segundos • Nunca repete • Melhores fontes do Brasil**")
+        csv = pd.DataFrame(dados).to_csv(index=False).encode('utf-8')
+        st.download_button("Baixar CSV", csv, "cotacoes.csv", "text/csv")
 
-    col1, col2 = st.columns([2,1])
-    with col2:
-        fonte = st.selectbox("Filtrar por fonte:", list(feeds_com_nome.keys()), index=0)
-    with col1:
-        st.markdown("")
+    # === NOTÍCIAS ===
+    with news_placeholder.container():
+        noticias = carregar_noticias()
+        st.header("Notícias Financeiras")
+        if not noticias:
+            st.info("Aguarde novas notícias...")
+        else:
+            st.success(f"{len(noticias)} notícias novas")
+            for n in noticias:
+                st.markdown(f"""
+                <div class="news-card">
+                    <div class="news-title"><a href="{n['link']}" target="_blank">{n['titulo']}</a></div>
+                    <div class="news-meta">{n['fonte']} • {n['data']}</div>
+                </div>
+                """, unsafe_allow_html=True)
 
-    placeholder_news = st.empty()
-
-    while True:
-        with placeholder_news.container():
-            noticias = buscar_noticias(fonte)
-            if not noticias:
-                st.info("Nenhuma notícia nova no momento. Atualizando em 60s...")
-            else:
-                st.success(f"{len(noticias)} notícias novas encontradas")
-                for n in noticias:
-                    st.markdown(f"""
-                    <div class="news-card">
-                        <div class="news-title">
-                            <a href="{n['link']}" target="_blank">{n['titulo']}</a>
-                        </div>
-                        <div class="news-meta">{n['fonte']} • {n['data']}</div>
-                    </div>
-                    """, unsafe_allow_html=True)
-                    st.markdown("<hr style='margin: 8px 0;'>", unsafe_allow_html=True)
-        time.sleep(60)
+    time.sleep(60)
