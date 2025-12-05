@@ -211,15 +211,33 @@ def fetch_all():
 def carregar_noticias_frescas():
     global vistas
     novas = []
-    feeds = [
-        "https://www.infomoney.com.br/feed/",
-        "https://www.moneytimes.com.br/mercados/feed/",
-        "https://valor.globo.com/rss",
-        "https://www.seudinheiro.com/feed/",
-        "https://br.investing.com/rss/news.rss",
-        "https://einvestidor.estadao.com.br/feed/",
-        "https://investnews.com.br/feed/",
-    ]
+feeds = [
+    "https://br.investing.com/rss/market_overview_Technical.rss",
+    "https://br.investing.com/rss/stock.rss",
+    "https://bmcnews.com.br/feed/",
+    "https://www.bloomberglinea.com.br/arc/outboundfeeds/rss.xml",
+    "https://einvestidor.estadao.com.br/feed/",
+    "https://www.infomoney.com.br/feed/",
+    "https://investnews.com.br/feed/",
+    "https://br.advfn.com/jornal/rss",
+    "https://www.infomoney.com.br/mercados/feed/",
+    "https://borainvestir.b3.com.br/noticias/mercado/feed/",
+    "https://www.moneytimes.com.br/mercados/feed/",
+    "https://www.infomoney.com.br/onde-investir/feed/",
+    "https://www.bcb.gov.br/api/feed/sitebcb/sitefeeds/cambio",
+    "https://www.bcb.gov.br/api/feed/sitebcb/sitefeeds/focus",
+    "https://www.bomdiamercado.com.br/feed/",
+    "https://timesbrasil.com.br/feed/",
+    "https://br.investing.com/rss/news.rss",
+    "https://cms.zerohedge.com/fullrss2.xml",
+    "https://cbn.globo.com/rss/cbn/",
+    "https://valor.globo.com/rss/valor",
+    "http://pox.globo.com/rss/valor",
+    "https://pox.globo.com/rss/valorinveste/",
+    "https://www.seudinheiro.com/feed/",
+    "https://www.barchart.com/news/authors/rss",
+    "https://feeds.feedburner.com/barchartnews"
+]
     for url in feeds:
         try:
             feed = feedparser.parse(url)
@@ -334,3 +352,4 @@ while True:
         )
 
     time.sleep(60)
+
