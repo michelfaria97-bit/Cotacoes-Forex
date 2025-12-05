@@ -100,13 +100,13 @@ assets = {
     'Crypto': {'btc-usd': 'Bitcoin', 'eth-usd': 'Ethereum'},
     # MAGNIFICENT 7
     'Mag 7': {
-        'google-inc-c': 'GOOG (Alphabet C)',
-        'microsoft-corp': 'MSFT (Microsoft)',
-        'amazon-com-inc': 'AMZN (Amazon)',
-        'apple-computer-inc': 'AAPL (Apple)',
-        'facebook-inc': 'META (Meta)',
-        'nvidia-corp': 'NVDA (Nvidia)',
-        'tesla-motors': 'TSLA (Tesla)'
+        'google-inc-c': 'GOOG',
+        'microsoft-corp': 'MSFT',
+        'amazon-com-inc': 'AMZN',
+        'apple-computer-inc': 'AAPL',
+        'facebook-inc': 'META',
+        'nvidia-corp': 'NVDA',
+        'tesla-motors': 'TSLA'
     }
 }
 
@@ -249,6 +249,7 @@ def carregar_noticias_frescas():
     "https://pox.globo.com/rss/valorinveste/",
     "https://www.seudinheiro.com/feed/",
     "https://www.barchart.com/news/authors/rss",
+    "https://investinglive.com/feed",
     "https://feeds.feedburner.com/barchartnews"
     ]
     for url in feeds:
@@ -376,4 +377,5 @@ while True:
         )
 
     time.sleep(60)
+
 
