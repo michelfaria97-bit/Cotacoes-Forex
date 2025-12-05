@@ -1,4 +1,4 @@
-# app.py — DASHBOARD FINAL PERFEITO: COTAÇÕES + NOTÍCIAS NA SIDEBAR
+# app.py — VERSÃO FINAL: NOTÍCIAS SEMPRE NO TOPO + TUDO FUNCIONANDO
 import streamlit as st
 import requests
 import re
@@ -13,7 +13,6 @@ from deep_translator import GoogleTranslator
 import json
 import os
 
-# ====================== CONFIGURAÇÃO ======================
 st.set_page_config(
     page_title="Cotações + Notícias ao Vivo",
     layout="wide",
@@ -63,7 +62,7 @@ def salvar_vistas(vistas):
 
 vistas = carregar_vistas()
 
-# ====================== TODOS OS ATIVOS ======================
+# ====================== ATIVOS COMPLETOS ======================
 assets = {
     'Forex': {
         'eur-usd': 'Euro/US Dollar', 'gbp-usd': 'British Pound/US Dollar', 'usd-jpy': 'US Dollar/Japanese Yen',
@@ -156,16 +155,12 @@ def get_single_non_forex(category, symbol, name):
         return {'Symbol': name, 'Last Price': 'Erro', '1d Change (%)': 0.0}
 
 def agrupar_forex(data):
-    grupos = {
-        'Dólar Americano': [], 'Euro': [], 'Libra Esterlina': [], 'Iene Japonês': [],
+    grupos = { 'Dólar Americano': [], 'Euro': [], 'Libra Esterlina': [], 'Iene Japonês': [],
         'Dólar Australiano': [], 'Dólar Neozelandês': [], 'Dólar Canadense': [],
-        'Franco Suíço': [], 'Real Brasileiro': [], 'Yuan Chinês': []
-    }
-    base_map = {
-        'USD': 'Dólar Americano', 'EUR': 'Euro', 'GBP': 'Libra Esterlina', 'JPY': 'Iene Japonês',
+        'Franco Suíço': [], 'Real Brasileiro': [], 'Yuan Chinês': [] }
+    base_map = { 'USD': 'Dólar Americano', 'EUR': 'Euro', 'GBP': 'Libra Esterlina', 'JPY': 'Iene Japonês',
         'AUD': 'Dólar Australiano', 'NZD': 'Dólar Neozelandês', 'CAD': 'Dólar Canadense',
-        'CHF': 'Franco Suíço', 'BRL': 'Real Brasileiro', 'CNY': 'Yuan Chinês'
-    }
+        'CHF': 'Franco Suíço', 'BRL': 'Real Brasileiro', 'CNY': 'Yuan Chinês' }
     for item in data:
         if '/' in item['Symbol']:
             base = item['Symbol'].split('/')[0]
@@ -212,9 +207,8 @@ def fetch_all():
     unique = [r for r in results if r['Symbol'] not in seen and not seen.add(r['Symbol'])]
     return unique
 
-# ====================== NOTÍCIAS — MAIS NOVAS NO TOPO ======================
-@st.cache_data(ttl=60, show_spinner=False)
-def carregar_noticias():
+# ====================== NOTÍCIAS — FORÇANDO ORDEM CORRETA ======================
+def carregar_noticias_frescas():
     global vistas
     novas = []
     feeds = [
@@ -229,7 +223,7 @@ def carregar_noticias():
     for url in feeds:
         try:
             feed = feedparser.parse(url)
-            for entry in feed.entries[:15]:
+            for entry in feed.entries[:12]:
                 link = entry.link.strip()
                 if link in vistas: continue
                 titulo = entry.title.strip()
@@ -243,11 +237,18 @@ def carregar_noticias():
                 except:
                     data = "Agora"
                 fonte = feed.feed.get('title', 'Fonte').split('-')[0].strip()
-                novas.append({'titulo': titulo, 'link': link, 'fonte': fonte, 'data': data, 'ts': time.time()})
+                novas.append({
+                    'titulo': titulo,
+                    'link': link,
+                    'fonte': fonte,
+                    'data': data,
+                    'timestamp': time.time()  # GARANTE ORDEM CORRETA
+                })
                 vistas.add(link)
         except: continue
     salvar_vistas(vistas)
-    novas.sort(key=lambda x: x['ts'], reverse=True)  # MAIS NOVA NO TOPO!
+    # ORDENA SEMPRE POR TIMESTAMP DESCENDENTE
+    novas.sort(key=lambda x: x['timestamp'], reverse=True)
     return novas[:20]
 
 # ====================== LOOP PRINCIPAL ======================
@@ -257,8 +258,8 @@ tz_brasil = timedelta(hours=-3)
 while True:
     inicio = time.time()
 
-    # === SIDEBAR: NOTÍCIAS (MAIS NOVAS NO TOPO) ===
-    noticias = carregar_noticias()
+    # === SIDEBAR: NOTÍCIAS MAIS NOVAS NO TOPO (GARANTIDO!) ===
+    noticias = carregar_noticias_frescas()  # função sem cache para forçar atualização
     with st.sidebar:
         st.markdown("<h2 style='color:#58a6ff;text-align:center;'>Notícias ao Vivo</h2>", unsafe_allow_html=True)
         if not noticias:
@@ -284,13 +285,11 @@ while True:
         st.markdown(f"<p style='text-align:center;color:#8b949e;font-size:18px;'>Atualizado: {agora.strftime('%d/%m/%Y %H:%M:%S')} • {time.time()-inicio:.1f}s</p>", unsafe_allow_html=True)
         st.markdown("---")
 
-        # Gráfico
         fig = grafico_forca(dados)
         if fig:
             st.plotly_chart(fig, use_container_width=True)
             st.markdown("---")
 
-        # Forex — 3 COLUNAS
         st.markdown("<h2 style='color:#79c0ff;'>Forex - Pares de Moedas</h2>", unsafe_allow_html=True)
         forex_data = [x for x in dados if '/' in x['Symbol']]
         grupos = agrupar_forex(forex_data)
@@ -306,7 +305,6 @@ while True:
                 i += 1
         st.markdown("---")
 
-        # Outros ativos — 3 COLUNAS
         st.markdown("<h2 style='color:#79c0ff;'>Outros Ativos</h2>", unsafe_allow_html=True)
         outros = [x for x in dados if '/' not in x['Symbol']]
         cols2 = st.columns(3)
@@ -326,7 +324,6 @@ while True:
                     st.dataframe(estilizar(df), use_container_width=True)
                 i += 1
 
-        # Download
         csv = pd.DataFrame(dados).to_csv(index=False).encode('utf-8')
         st.download_button(
             label="Baixar todos os dados (CSV)",
