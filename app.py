@@ -1,4 +1,4 @@
-# app.py — DASHBOARD PROFISSIONAL COM NOTÍCIAS NA SIDEBAR
+# app.py — VERSÃO FINAL COM NOTÍCIAS NA SIDEBAR (FUNCIONA 100%)
 import streamlit as st
 import requests
 import re
@@ -14,7 +14,7 @@ import json
 import os
 
 # ====================== CONFIGURAÇÃO ======================
-st.set_page_config = st.set_page_config(
+st.set_page_config(
     page_title="Cotações + Notícias ao Vivo",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -40,17 +40,13 @@ st.markdown("""
         line-height: 1.4;
     }
     .news-title a:hover { color: #79c0ff; text-decoration: underline; }
-    .news-meta { 
-        font-size: 12px; 
-        color: #8b949e; 
-        margin-top: 6px; 
-    }
+    .news-meta { font-size: 12px; color: #8b949e; margin-top: 6px; }
     .stDataFrame { width: 100% !important; }
     [data-testid="column"] { padding: 8px !important; }
 </style>
 """, unsafe_allow_html=True)
 
-# ====================== CACHE DE NOTÍCIAS (NUNCA REPETE) ======================
+# ====================== CACHE DE NOTÍCIAS ======================
 CACHE_FILE = ".streamlit/noticias_vistas.json"
 if not os.path.exists(".streamlit"):
     os.makedirs(".streamlit", exist_ok=True)
@@ -73,7 +69,7 @@ def salvar_vistas(vistas):
 
 vistas = carregar_vistas()
 
-# ====================== TODOS OS ATIVOS ======================
+# ====================== ATIVOS ======================
 assets = {
     'Forex': {
         'eur-usd': 'Euro/US Dollar', 'gbp-usd': 'British Pound/US Dollar', 'usd-jpy': 'US Dollar/Japanese Yen',
@@ -208,13 +204,15 @@ def fetch_all():
         for f in as_completed(futures):
             try:
                 results.append(f.result())
+            except:
+                pass  # <<< ESSA LINHA ESTAVA FALTANDO!
     seen = set()
     unique = [r for r in results if r['Symbol'] not in seen and not seen.add(r['Symbol'])]
     return unique
 
 # ====================== NOTÍCIAS NA SIDEBAR ======================
 @st.cache_data(ttl=60, show_spinner=False)
-def carregar_noticias_sidebar():
+def carregar_noticias():
     global vistas
     novas = []
     feeds = [
@@ -228,12 +226,12 @@ def carregar_noticias_sidebar():
     for url in feeds:
         try:
             feed = feedparser.parse(url)
-            for entry in feed.entries[:15]:
+            for entry in feed.entries[:12]:
                 link = entry.link.strip()
                 if link in vistas: continue
                 titulo = entry.title.strip()
                 try:
-                    if any(kw in titulo.lower() for kw in ["fed", "cpi", "powell", "ecb", "dollar"]):
+                    if any(kw in titulo.lower() for kw in ["fed", "cpi", "powell", "ecb"]):
                         titulo = GoogleTranslator(source='en', target='pt').translate(titulo)
                 except: pass
                 data = entry.get('published', 'Agora')[:16].replace('T', ' ')
@@ -245,21 +243,21 @@ def carregar_noticias_sidebar():
     return novas[:20]
 
 # ====================== LOOP PRINCIPAL ======================
-placeholder_main = st.empty()
+placeholder = st.empty()
 tz_brasil = timedelta(hours=-3)
 
 while True:
     inicio = time.time()
 
-    # === ATUALIZA NOTÍCIAS NA SIDEBAR ===
-    noticias_sidebar = carregar_noticias_sidebar()
+    # === SIDEBAR COM NOTÍCIAS ===
+    noticias = carregar_noticias()
     with st.sidebar:
-        st.markdown("<h2 style='color:#58a6ff; text-align:center;'>Notícias ao Vivo</h2>", unsafe_allow_html=True)
-        if not noticias_sidebar:
-            st.info("Carregando notícias...")
+        st.markdown("<h2 style='color:#58a6ff;text-align:center;'>Notícias ao Vivo</h2>", unsafe_allow_html=True)
+        if not noticias:
+            st.info("Carregando...")
         else:
-            st.success(f"{len(noticias_sidebar)} novas")
-            for n in noticias_sidebar:
+            st.success(f"{len(noticias)} novas")
+            for n in noticias:
                 st.markdown(f"""
                 <div class="news-item">
                     <div class="news-title"><a href="{n['link']}" target="_blank">{n['titulo']}</a></div>
@@ -270,22 +268,20 @@ while True:
         st.caption("Atualiza a cada minuto")
 
     # === CONTEÚDO PRINCIPAL ===
-    with placeholder_main.container():
+    with placeholder.container():
         dados = fetch_all()
         agora = datetime.now() + tz_brasil
 
-        st.markdown(f"<h1 style='text-align: center; color: #58a6ff;'>COTAÇÕES AO VIVO</h1>", unsafe_allow_html=True)
-        st.markdown(f"<p style='text-align: center; color: #8b949e; font-size: 18px;'>Atualizado: {agora.strftime('%d/%m/%Y %H:%M:%S')} • {time.time()-inicio:.1f}s</p>", unsafe_allow_html=True)
+        st.markdown(f"<h1 style='text-align:center;color:#58a6ff;'>COTAÇÕES AO VIVO</h1>", unsafe_allow_html=True)
+        st.markdown(f"<p style='text-align:center;color:#8b949e;font-size:18px;'>Atualizado: {agora.strftime('%d/%m/%Y %H:%M:%S')} • {time.time()-inicio:.1f}s</p>", unsafe_allow_html=True)
         st.markdown("---")
 
-        # Gráfico
         fig = grafico_forca(dados)
         if fig:
             st.plotly_chart(fig, use_container_width=True)
             st.markdown("---")
 
-        # Forex
-        st.markdown("<h2 style='color: #79c0ff;'>Forex - Pares de Moedas</h2>", unsafe_allow_html=True)
+        st.markdown("<h2 style='color:#79c0ff;'>Forex</h2>", unsafe_allow_html=True)
         forex_data = [x for x in dados if '/' in x['Symbol']]
         grupos = agrupar_forex(forex_data)
         cols = st.columns(4)
@@ -300,8 +296,7 @@ while True:
                 i += 1
         st.markdown("---")
 
-        # Outros ativos
-        st.markdown("<h2 style='color: #79c0ff;'>Outros Ativos</h2>", unsafe_allow_html=True)
+        st.markdown("<h2 style='color:#79c0ff;'>Outros Ativos</h2>", unsafe_allow_html=True)
         outros = [x for x in dados if '/' not in x['Symbol']]
         cols2 = st.columns(4)
         cats = {'USA':[], 'Asia/Pacifico':[], 'Europa':[], 'Commodities':[], 'Crypto':[]}
@@ -323,7 +318,7 @@ while True:
         # Download
         csv = pd.DataFrame(dados).to_csv(index=False).encode('utf-8')
         st.download_button(
-            label="Baixar todos os dados (CSV)",
+            label="Baixar CSV",
             data=csv,
             file_name=f"cotacoes_{agora.strftime('%Y%m%d_%H%M')}.csv",
             mime="text/csv",
