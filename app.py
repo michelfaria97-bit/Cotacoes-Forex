@@ -310,26 +310,59 @@ while True:
     # === SIDEBAR: NOTÍCIAS MAIS NOVAS NO TOPO ===
     noticias = carregar_noticias_frescas()  # função sem cache para forçar atualização
     with st.sidebar:
-        st.markdown("<h2 style='color:#58a6ff;text-align:center;'>Notícias ao Vivo</h2>", unsafe_allow_html=True)
-        
-        if not noticias:
-            st.info("Carregando...")
-        else:
-            # === PRIMEIRO: todas as notícias (mais nova no topo) ===
-            for n in noticias:
-                st.markdown(f"""
-                <div class="news-item" style="margin-bottom: 12px;">
-                    <div class="news-title"><a href="{n['link']}" target="_blank">{n['titulo']}</a></div>
-                    <div class="news-meta" style="font-size:0.85em;color:#8b949e;">{n['fonte']} • {n['data']}</div>
+        st.markdown(
+            "<h2 style='color:#58a6ff;text-align:center;margin-bottom:20px;'>Notícias ao Vivo</h2>",
+            unsafe_allow_html=True
+        )
+    
+        if not noticias:  # ← ainda carregando ou realmente zero notícias novas
+            st.markdown(
+                """
+                <div style="text-align:center; padding: 30px 10px; color: #8b949e; font-size: 15px;">
+                    <div style="font-size: 40px; margin-bottom: 10px;">Searching</div>
+                    Buscando notícias frescas...<br>
+                    <small>Atualiza automaticamente a cada minuto</small>
                 </div>
-                <hr style="border-top:1px solid #30363d;margin:8px 0;">
-                """, unsafe_allow_html=True)
-            
-            # === DEPOIS: contador verde e rodapé (ficam sempre embaixo) ===
-            st.success(f"{len(noticias)} novas")
-            st.markdown("---")
-            st.caption("Atualiza a cada minuto")
+                """,
+                unsafe_allow_html=True
+            )
+        else:
+            # === MOSTRA TODAS AS NOTÍCIAS (mais nova sempre no topo) ===
+            for i, n in enumerate(noticias):
+                # Destaque extra forte na PRIMEIRA notícia (a mais nova de todas
+                cor_titulo = "#ffffff" if i == 0 else "#e6edf3"
+                peso_titulo = "700" if i == 0 else "600"
+                tamanho_fonte = "16.5px" if i == 0 else "15.5px"
+    
+                st.markdown(
+                    f"""
+                    <div style="margin-bottom: 18px; padding-bottom: 12px; border-bottom: 1px solid #30363d;">
+                        <div style="font-size:{tamanho_fonte}; font-weight:{peso_titulo}; color:{cor_titulo}; line-height:1.3;">
+                            <a href="{n['link']}" target="_blank" style="color:inherit; text-decoration:none;">
+                                {n['titulo']}
+                            </a>
+                        </div>
+                        <div style="font-size:13px; color:#8b949e; margin-top:6px;">
+                            {n['fonte']} • {n['data']}
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
 
+        # === CONTADOR VERDE BONITÃO SEMPRE NO FINAL ===
+        st.markdown(
+            f"""
+            <div style="background:#238636; color:white; padding:10px 14px; border-radius:8px; 
+                        text-align:center; font-weight:600; font-size:15px; margin: 20px 0 10px 0;">
+                {len(noticias)} novas
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    # Rodapé discreto
+    st.caption("Atualiza a cada minuto")
     # === CONTEÚDO PRINCIPAL ===
     with placeholder.container():
         dados = fetch_all()
@@ -391,4 +424,5 @@ while True:
 
     # Atraso de 60 segundos antes da próxima atualização
     time.sleep(60)
+
 
