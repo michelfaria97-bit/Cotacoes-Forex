@@ -42,7 +42,7 @@ st.markdown("""
 # ====================== CACHE DE NOTÍCIAS ======================
 CACHE_FILE = ".streamlit/noticias_vistas.json"
 if not os.path.exists(".streamlit"):
-os.makedirs(".streamlit", exist_ok=True)
+       os.makedirs(".streamlit", exist_ok=True)
 
 def carregar_vistas():
     if os.path.exists(CACHE_FILE):
@@ -373,4 +373,5 @@ while True:
         )
 
     time.sleep(60)
+
 
