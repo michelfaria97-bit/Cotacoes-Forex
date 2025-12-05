@@ -297,19 +297,24 @@ while True:
     noticias = carregar_noticias_frescas()  # função sem cache para forçar atualização
     with st.sidebar:
         st.markdown("<h2 style='color:#58a6ff;text-align:center;'>Notícias ao Vivo</h2>", unsafe_allow_html=True)
+        
         if not noticias:
             st.info("Carregando...")
         else:
-            st.success(f"{len(noticias)} novas")
+            # === PRIMEIRO: todas as notícias (mais nova no topo) ===
             for n in noticias:
                 st.markdown(f"""
-                <div class="news-item">
+                <div class="news-item" style="margin-bottom: 12px;">
                     <div class="news-title"><a href="{n['link']}" target="_blank">{n['titulo']}</a></div>
-                    <div class="news-meta">{n['fonte']} • {n['data']}</div>
+                    <div class="news-meta" style="font-size:0.85em;color:#8b949e;">{n['fonte']} • {n['data']}</div>
                 </div>
+                <hr style="border-top:1px solid #30363d;margin:8px 0;">
                 """, unsafe_allow_html=True)
-        st.markdown("---")
-        st.caption("Atualiza a cada minuto")
+            
+            # === DEPOIS: contador verde e rodapé (ficam sempre embaixo) ===
+            st.success(f"{len(noticias)} novas")
+            st.markdown("---")
+            st.caption("Atualiza a cada minuto")
 
     # === CONTEÚDO PRINCIPAL ===
     with placeholder.container():
@@ -371,3 +376,4 @@ while True:
         )
 
     time.sleep(60)
+
