@@ -42,23 +42,23 @@ st.markdown("""
 # ====================== CACHE DE NOTÍCIAS ======================
 CACHE_FILE = ".streamlit/noticias_vistas.json"
 if not os.path.exists(".streamlit"):
-       os.makedirs(".streamlit", exist_ok=True)
+    os.makedirs(".streamlit", exist_ok=True) # Indentação corrigida aqui
 
 def carregar_vistas():
     if os.path.exists(CACHE_FILE):
-        try:
-            with open(CACHE_FILE, "r", encoding="utf-8") as f:
-                return set(json.load(f))
-        except:
-            return set()
-    return set()
+        try:
+            with open(CACHE_FILE, "r", encoding="utf-8") as f:
+                return set(json.load(f))
+        except:
+            return set()
+    return set()
 
 def salvar_vistas(vistas):
-    try:
-        with open(CACHE_FILE, "w", encoding="utf-8") as f:
-            json.dump(list(vistas), f, ensure_ascii=False)
-    except:
-        pass
+    try:
+        with open(CACHE_FILE, "w", encoding="utf-8") as f:
+            json.dump(list(vistas), f, ensure_ascii=False)
+    except:
+        pass
 
 vistas = carregar_vistas()
 
@@ -373,6 +373,7 @@ while True:
         )
 
     time.sleep(60)
+
 
 
 
