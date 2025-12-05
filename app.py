@@ -121,6 +121,20 @@ def clean_price(p):
     except: return p
 
 def get_single_forex(symbol, _):
+    url = f'https://br.investing.com/currencies/{symbol}'
+    headers = {'User-Agent': 'Mozilla/5.0'}
+    try:
+        r = requests.get(url, headers=headers, timeout=15)
+        soup = BeautifulSoup(r.text, 'html.parser')
+        price = soup.find('div', {'data-test': 'instrument-price-last'})
+        change = soup.find('span', {'data-test': 'instrument-price-change-percent'})
+        price_txt = price.text.strip() if price else 'N/D'
+        change_txt = change.text.strip() if change else '0%'
+        num = re.sub(r'[^\d.-]', '', change_txt.replace(',', '.'))
+        return {'Symbol': symbol.upper().replace('-','/'), 'Last Price': clean_price(price_txt), '1d Change (%)': round(float(num or 0), 2)}
+    except:
+        return {'Symbol': symbol.upper().replace('-','/'), 'Last Price': 'Erro', '1d Change (%)': 0.0}
+
 def get_single_non_forex(category, symbol, name):
     if symbol == 'usdollar':
         url = 'https://br.investing.com/indices/usdollar'
@@ -142,7 +156,7 @@ def get_single_non_forex(category, symbol, name):
         r = requests.get(url, headers=headers, timeout=25)
         soup = BeautifulSoup(r.text, 'html.parser')
         
-        # O seletor é o mesmo para preço e % de variação em todas as categorias
+        # Seletores de preço e variação percentual são consistentes em ações/índices
         price_elem = soup.find('div', {'data-test': 'instrument-price-last'})
         change_elem = soup.find('span', {'data-test': 'instrument-price-change-percent'})
         
@@ -152,31 +166,17 @@ def get_single_non_forex(category, symbol, name):
         price = price_elem.text.strip()
         change_text = change_elem.text.strip()
         
-        # Limpeza da variação percentual:
+        # Limpeza da variação percentual: 
         # 1. Remove parênteses
         # 2. Remove o sinal de porcentagem e substitui vírgula por ponto
         num = change_text.replace('(', '').replace(')', '').replace('%', '').replace(',', '.')
         
-        # Garante que só fique o número
+        # Garante que só fique o número, tratando possíveis casos de erro na limpeza
         num = re.sub(r'[^\d.-]', '', num)
         
         return {'Symbol': name, 'Last Price': clean_price(price), '1d Change (%)': round(float(num or 0), 2)}
     except Exception as e:
         # print(f"Erro ao buscar {name}: {e}")
-        return {'Symbol': name, 'Last Price': 'Erro', '1d Change (%)': 0.0}
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-    try:
-        r = requests.get(url, headers=headers, timeout=25)
-        soup = BeautifulSoup(r.text, 'html.parser')
-        price_elem = soup.find('div', {'data-test': 'instrument-price-last'})
-        change_elem = soup.find('span', {'data-test': 'instrument-price-change-percent'})
-        if not price_elem or not change_elem:
-            return {'Symbol': name, 'Last Price': 'N/D', '1d Change (%)': 0.0}
-        price = price_elem.text.strip()
-        change_text = change_elem.text.strip()
-        num = re.sub(r'[^\d.-]', '', change_text.replace(',', '.'))
-        return {'Symbol': name, 'Last Price': clean_price(price), '1d Change (%)': round(float(num or 0), 2)}
-    except:
         return {'Symbol': name, 'Last Price': 'Erro', '1d Change (%)': 0.0}
 
 def agrupar_forex(data):
@@ -261,8 +261,8 @@ def carregar_noticias_frescas():
     "http://pox.globo.com/rss/valor",
     "https://pox.globo.com/rss/valorinveste/",
     "https://www.seudinheiro.com/feed/",
-    "https://investinglive.com/feed",
     "https://www.barchart.com/news/authors/rss",
+    "https://investinglive.com/feed",
     "https://feeds.feedburner.com/barchartnews"
     ]
     for url in feeds:
@@ -384,5 +384,5 @@ while True:
             key=f"dl_{int(time.time())}"
         )
 
+    # Atraso de 60 segundos antes da próxima atualização
     time.sleep(60)
-
