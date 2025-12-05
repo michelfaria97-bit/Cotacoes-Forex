@@ -1,4 +1,4 @@
-# app.py — COTAÇÕES + NOTÍCIAS AO VIVO — VERSÃO FINAL 100% FUNCIONAL
+# app.py — DASHBOARD PROFISSIONAL COM NOTÍCIAS NA SIDEBAR
 import streamlit as st
 import requests
 import re
@@ -13,23 +13,38 @@ from deep_translator import GoogleTranslator
 import json
 import os
 
-st.set_page_config(page_title="Cotações + Notícias ao Vivo", layout="wide", page_icon="Chart")
+# ====================== CONFIGURAÇÃO ======================
+st.set_page_config = st.set_page_config(
+    page_title="Cotações + Notícias ao Vivo",
+    layout="wide",
+    initial_sidebar_state="expanded",
+    page_icon="Chart"
+)
 
 # ====================== ESTILO ======================
 st.markdown("""
 <style>
-    .news-card {
-        padding: 16px;
-        border-radius: 10px;
-        background: #1e1e1e1e;
-        border-left: 4px solid #00ff9d;
-        margin: 12px 0;
-        transition: all 0.3s;
+    .main { background-color: #0e1117; }
+    .sidebar .sidebar-content { background-color: #161b22; }
+    .news-item {
+        padding: 14px;
+        border-bottom: 1px solid #30363d;
+        transition: all 0.2s;
     }
-    .news-card:hover { background: #252525; transform: translateX(4px); }
-    .news-title a { color: #00ff9d; text-decoration: none; font-weight: 600; font-size: 16.5px; }
-    .news-title a:hover { text-decoration: underline; }
-    .news-meta { font-size: 13px; color: #aaa; margin-top: 6px; }
+    .news-item:hover { background-color: #21262d; padding-left: 18px; }
+    .news-title a { 
+        color: #58a6ff; 
+        text-decoration: none; 
+        font-weight: 600; 
+        font-size: 15px; 
+        line-height: 1.4;
+    }
+    .news-title a:hover { color: #79c0ff; text-decoration: underline; }
+    .news-meta { 
+        font-size: 12px; 
+        color: #8b949e; 
+        margin-top: 6px; 
+    }
     .stDataFrame { width: 100% !important; }
     [data-testid="column"] { padding: 8px !important; }
 </style>
@@ -51,7 +66,7 @@ def carregar_vistas():
 
 def salvar_vistas(vistas):
     try:
-        with open(CACHE_FILE, "w", encoding="utf8") as f:
+        with open(CACHE_FILE, "w", encoding="utf-8") as f:
             json.dump(list(vistas), f, ensure_ascii=False)
     except:
         pass
@@ -147,16 +162,12 @@ def get_single_non_forex(category, symbol, name):
         return {'Symbol': name, 'Last Price': 'Erro', '1d Change (%)': 0.0}
 
 def agrupar_forex(data):
-    grupos = {
-        'Dólar Americano': [], 'Euro': [], 'Libra Esterlina': [], 'Iene Japonês': [],
+    grupos = { 'Dólar Americano': [], 'Euro': [], 'Libra Esterlina': [], 'Iene Japonês': [],
         'Dólar Australiano': [], 'Dólar Neozelandês': [], 'Dólar Canadense': [],
-        'Franco Suíço': [], 'Real Brasileiro': [], 'Yuan Chinês': []
-    }
-    base_map = {
-        'USD': 'Dólar Americano', 'EUR': 'Euro', 'GBP': 'Libra Esterlina', 'JPY': 'Iene Japonês',
+        'Franco Suíço': [], 'Real Brasileiro': [], 'Yuan Chinês': [] }
+    base_map = { 'USD': 'Dólar Americano', 'EUR': 'Euro', 'GBP': 'Libra Esterlina', 'JPY': 'Iene Japonês',
         'AUD': 'Dólar Australiano', 'NZD': 'Dólar Neozelandês', 'CAD': 'Dólar Canadense',
-        'CHF': 'Franco Suíço', 'BRL': 'Real Brasileiro', 'CNY': 'Yuan Chinês'
-    }
+        'CHF': 'Franco Suíço', 'BRL': 'Real Brasileiro', 'CNY': 'Yuan Chinês' }
     for item in data:
         if '/' in item['Symbol']:
             base = item['Symbol'].split('/')[0]
@@ -197,14 +208,13 @@ def fetch_all():
         for f in as_completed(futures):
             try:
                 results.append(f.result())
-            except: pass
     seen = set()
     unique = [r for r in results if r['Symbol'] not in seen and not seen.add(r['Symbol'])]
     return unique
 
-# ====================== NOTÍCIAS AO VIVO ======================
+# ====================== NOTÍCIAS NA SIDEBAR ======================
 @st.cache_data(ttl=60, show_spinner=False)
-def carregar_noticias():
+def carregar_noticias_sidebar():
     global vistas
     novas = []
     feeds = [
@@ -214,59 +224,72 @@ def carregar_noticias():
         "https://www.seudinheiro.com/feed/",
         "https://br.investing.com/rss/news.rss",
         "https://einvestidor.estadao.com.br/feed/",
-        "https://investnews.com.br/feed/",
     ]
     for url in feeds:
         try:
             feed = feedparser.parse(url)
-            for entry in feed.entries[:12]:
+            for entry in feed.entries[:15]:
                 link = entry.link.strip()
                 if link in vistas: continue
                 titulo = entry.title.strip()
                 try:
-                    if any(kw in titulo.lower() for kw in ["fed", "cpi", "powell", "ecb", "dollar", "rate"]):
+                    if any(kw in titulo.lower() for kw in ["fed", "cpi", "powell", "ecb", "dollar"]):
                         titulo = GoogleTranslator(source='en', target='pt').translate(titulo)
                 except: pass
-                data = entry.get('published', '')[:16].replace('T', ' ') or "Agora"
+                data = entry.get('published', 'Agora')[:16].replace('T', ' ')
                 fonte = feed.feed.get('title', 'Fonte').split('-')[0].strip()
                 novas.append({'titulo': titulo, 'link': link, 'fonte': fonte, 'data': data})
                 vistas.add(link)
         except: continue
     salvar_vistas(vistas)
-    return novas[:30]
+    return novas[:20]
 
 # ====================== LOOP PRINCIPAL ======================
-tab_cotacoes, tab_noticias = st.tabs(["Cotações ao Vivo", "Notícias ao Vivo"])
-
-placeholder_cot = st.empty()
-placeholder_news = st.empty()
-
+placeholder_main = st.empty()
 tz_brasil = timedelta(hours=-3)
 
 while True:
     inicio = time.time()
 
-    # ==================== COTAÇÕES ====================
-    with placeholder_cot.container():
+    # === ATUALIZA NOTÍCIAS NA SIDEBAR ===
+    noticias_sidebar = carregar_noticias_sidebar()
+    with st.sidebar:
+        st.markdown("<h2 style='color:#58a6ff; text-align:center;'>Notícias ao Vivo</h2>", unsafe_allow_html=True)
+        if not noticias_sidebar:
+            st.info("Carregando notícias...")
+        else:
+            st.success(f"{len(noticias_sidebar)} novas")
+            for n in noticias_sidebar:
+                st.markdown(f"""
+                <div class="news-item">
+                    <div class="news-title"><a href="{n['link']}" target="_blank">{n['titulo']}</a></div>
+                    <div class="news-meta">{n['fonte']} • {n['data']}</div>
+                </div>
+                """, unsafe_allow_html=True)
+        st.markdown("---")
+        st.caption("Atualiza a cada minuto")
+
+    # === CONTEÚDO PRINCIPAL ===
+    with placeholder_main.container():
         dados = fetch_all()
         agora = datetime.now() + tz_brasil
 
-        st.markdown(f"**Atualizado:** {agora.strftime('%d/%m/%Y %H:%M:%S')} (Brasília) • Tempo: {time.time()-inicio:.1f}s")
+        st.markdown(f"<h1 style='text-align: center; color: #58a6ff;'>COTAÇÕES AO VIVO</h1>", unsafe_allow_html=True)
+        st.markdown(f"<p style='text-align: center; color: #8b949e; font-size: 18px;'>Atualizado: {agora.strftime('%d/%m/%Y %H:%M:%S')} • {time.time()-inicio:.1f}s</p>", unsafe_allow_html=True)
         st.markdown("---")
 
-        # Gráfico de força
+        # Gráfico
         fig = grafico_forca(dados)
         if fig:
             st.plotly_chart(fig, use_container_width=True)
             st.markdown("---")
 
         # Forex
-        st.header("Forex - Pares de Moedas")
+        st.markdown("<h2 style='color: #79c0ff;'>Forex - Pares de Moedas</h2>", unsafe_allow_html=True)
         forex_data = [x for x in dados if '/' in x['Symbol']]
         grupos = agrupar_forex(forex_data)
         cols = st.columns(4)
-        ordem = ['Dólar Americano', 'Euro', 'Libra Esterlina', 'Iene Japonês', 'Dólar Australiano',
-                 'Dólar Neozelandês', 'Dólar Canadense', 'Franco Suíço', 'Real Brasileiro', 'Yuan Chinês']
+        ordem = ['Dólar Americano', 'Euro', 'Libra Esterlina', 'Iene Japonês', 'Dólar Australiano', 'Dólar Neozelandês', 'Dólar Canadense', 'Franco Suíço', 'Real Brasileiro', 'Yuan Chinês']
         i = 0
         for titulo in ordem:
             if titulo in grupos and grupos[titulo]:
@@ -278,7 +301,7 @@ while True:
         st.markdown("---")
 
         # Outros ativos
-        st.header("Outros Ativos")
+        st.markdown("<h2 style='color: #79c0ff;'>Outros Ativos</h2>", unsafe_allow_html=True)
         outros = [x for x in dados if '/' not in x['Symbol']]
         cols2 = st.columns(4)
         cats = {'USA':[], 'Asia/Pacifico':[], 'Europa':[], 'Commodities':[], 'Crypto':[]}
@@ -297,30 +320,14 @@ while True:
                     st.dataframe(estilizar(df), use_container_width=True)
                 i += 1
 
-        # Botão de download (fora do loop com key única)
+        # Download
         csv = pd.DataFrame(dados).to_csv(index=False).encode('utf-8')
         st.download_button(
             label="Baixar todos os dados (CSV)",
             data=csv,
             file_name=f"cotacoes_{agora.strftime('%Y%m%d_%H%M')}.csv",
             mime="text/csv",
-            key=f"btn_{int(time.time())}"  # key muda a cada atualização
+            key=f"dl_{int(time.time())}"
         )
-
-    # ==================== NOTÍCIAS ====================
-    with placeholder_news.container():
-        noticias = carregar_noticias()
-        st.header("Notícias Financeiras ao Vivo")
-        if not noticias:
-            st.info("Nenhuma notícia nova no momento... atualizando em 60s")
-        else:
-            st.success(f"{len(noticias)} notícias novas")
-            for n in noticias:
-                st.markdown(f"""
-                <div class="news-card">
-                    <div class="news-title"><a href="{n['link']}" target="_blank">{n['titulo']}</a></div>
-                    <div class="news-meta">{n['fonte']} • {n['data']}</div>
-                </div>
-                """, unsafe_allow_html=True)
 
     time.sleep(60)
