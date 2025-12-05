@@ -236,6 +236,7 @@ def carregar_noticias_frescas():
     "https://pox.globo.com/rss/valorinveste/",
     "https://www.seudinheiro.com/feed/",
     "https://www.barchart.com/news/authors/rss",
+    "https://investinglive.com/feed",
     "https://feeds.feedburner.com/barchartnews"
     ]
     for url in feeds:
@@ -352,6 +353,7 @@ while True:
         )
 
     time.sleep(60)
+
 
 
 
