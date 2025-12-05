@@ -1,4 +1,4 @@
-# app.py — COTAÇÕES + NOTÍCIAS AO VIVO (FUNCIONA PERFEITO NO STREAMLIT CLOUD)
+# app.py — COTAÇÕES + NOTÍCIAS AO VIVO — VERSÃO FINAL 100% FUNCIONAL
 import streamlit as st
 import requests
 import re
@@ -15,13 +15,13 @@ import os
 
 st.set_page_config(page_title="Cotações + Notícias ao Vivo", layout="wide", page_icon="Chart")
 
-# ==================== CSS BONITO ====================
+# ====================== ESTILO ======================
 st.markdown("""
 <style>
     .news-card {
         padding: 16px;
         border-radius: 10px;
-        background: #1e1e1e;
+        background: #1e1e1e1e;
         border-left: 4px solid #00ff9d;
         margin: 12px 0;
         transition: all 0.3s;
@@ -35,7 +35,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# ==================== CACHE DE NOTÍCIAS (NUNCA REPETE) ====================
+# ====================== CACHE DE NOTÍCIAS (NUNCA REPETE) ======================
 CACHE_FILE = ".streamlit/noticias_vistas.json"
 if not os.path.exists(".streamlit"):
     os.makedirs(".streamlit", exist_ok=True)
@@ -51,14 +51,14 @@ def carregar_vistas():
 
 def salvar_vistas(vistas):
     try:
-        with open(CACHE_FILE, "w", encoding="utf-8") as f:
+        with open(CACHE_FILE, "w", encoding="utf8") as f:
             json.dump(list(vistas), f, ensure_ascii=False)
     except:
         pass
 
 vistas = carregar_vistas()
 
-# ==================== ATIVOS (100% seu original) ====================
+# ====================== TODOS OS ATIVOS ======================
 assets = {
     'Forex': {
         'eur-usd': 'Euro/US Dollar', 'gbp-usd': 'British Pound/US Dollar', 'usd-jpy': 'US Dollar/Japanese Yen',
@@ -82,12 +82,13 @@ assets = {
         'jpy-aud': 'Japanese Yen/Australian Dollar', 'brl-cad': 'Brazilian Real/Canadian Dollar', 'cny-usd': 'Chinese Yuan/US Dollar',
         'cny-nzd': 'Chinese Yuan/New Zealand Dollar', 'cny-jpy': 'Chinese Yuan/Japanese Yen', 'cny-gbp': 'Chinese Yuan/British Pound',
         'cny-chf': 'Chinese Yuan/Swiss Franc', 'cny-aud': 'Chinese Yuan/Australian Dollar', 'cny-eur': 'Chinese Yuan/Euro',
-        'brl-usd': 'Brazilian Real/US Dollar', 'brl-jpy': 'Brazilian Real/Japanese Yen', 'brl-gbp': 'Brazilian Real/British Pound', 'brl-nzd': 'Brazilian Real/New Zealand Dollar',
-        'brl-aud': 'Brazilian Real/Australian Dollar', 'brl-eur': 'Brazilian Real/Euro'
+        'brl-usd': 'Brazilian Real/US Dollar', 'brl-jpy': 'Brazilian Real/Japanese Yen', 'brl-gbp': 'Brazilian Real/British Pound',
+        'brl-nzd': 'Brazilian Real/New Zealand Dollar', 'brl-aud': 'Brazilian Real/Australian Dollar', 'brl-eur': 'Brazilian Real/Euro'
     },
     'USA': {'us-spx-500-futures': 'S&P 500', 'nq-100-futures': 'Nasdaq 100', 'us-30-futures': 'US30',
             'smallcap-2000-futures': 'Russel 2000', 'volatility-s-p-500': 'VIX', 'usdollar': 'DXY'},
-    'Asia/Pacifico': {'hong-kong-40-futures': 'Hang Seng', 'shanghai-composite': 'SSE Composite', 'japan-225-futures': 'Nikkei 225', 'ftse-china-25': 'FTSE China', 'india-50-futures': 'Nifty 50', 'australia-200-futures': 'ASX 200'},
+    'Asia/Pacifico': {'hong-kong-40-futures': 'Hang Seng', 'shanghai-composite': 'SSE Composite', 'japan-225-futures': 'Nikkei 225',
+                 'ftse-china-25': 'FTSE China', 'india-50-futures': 'Nifty 50', 'australia-200-futures': 'ASX 200'},
     'Europa': {'uk-100-futures': 'FTSE 100', 'germany-30-futures': 'DAX', 'france-40-futures': 'CAC 40',
                'eu-stocks-50-futures': 'STOXX 50', 'spain-35-futures': 'IBEX 35', 'italy-40-futures': 'FTSE MIB', 'euro-stoxx-600': 'STOXX 600'},
     'Commodities': {'gold': 'Gold', 'silver': 'Silver', 'platinum': 'Platinum', 'copper': 'Copper',
@@ -95,7 +96,7 @@ assets = {
     'Crypto': {'btc-usd': 'Bitcoin', 'eth-usd': 'Ethereum'}
 }
 
-# ==================== FUNÇÕES DE COTAÇÕES (100% suas) ====================
+# ====================== FUNÇÕES DE COTAÇÕES ======================
 def clean_price(p):
     if not p or p in ['N/D', '-']: return 'N/D'
     p = p.replace(',', '.')
@@ -111,12 +112,12 @@ def get_single_forex(symbol, _):
     try:
         r = requests.get(url, headers=headers, timeout=15)
         soup = BeautifulSoup(r.text, 'html.parser')
-        price_elem = soup.find('div', {'data-test': 'instrument-price-last'})
-        change_elem = soup.find('span', {'data-test': 'instrument-price-change-percent'})
-        price = price_elem.text.strip() if price_elem else 'N/D'
-        change_text = change_elem.text.strip() if change_elem else '0%'
-        num = re.sub(r'[^\d.-]', '', change_text.replace(',', '.'))
-        return {'Symbol': symbol.upper().replace('-','/'), 'Last Price': clean_price(price), '1d Change (%)': round(float(num or 0), 2)}
+        price = soup.find('div', {'data-test': 'instrument-price-last'})
+        change = soup.find('span', {'data-test': 'instrument-price-change-percent'})
+        price_txt = price.text.strip() if price else 'N/D'
+        change_txt = change.text.strip() if change else '0%'
+        num = re.sub(r'[^\d.-]', '', change_txt.replace(',', '.'))
+        return {'Symbol': symbol.upper().replace('-','/'), 'Last Price': clean_price(price_txt), '1d Change (%)': round(float(num or 0), 2)}
     except:
         return {'Symbol': symbol.upper().replace('-','/'), 'Last Price': 'Erro', '1d Change (%)': 0.0}
 
@@ -124,29 +125,38 @@ def get_single_non_forex(category, symbol, name):
     if symbol == 'usdollar':
         url = 'https://br.investing.com/indices/usdollar'
     elif symbol in ['btc-usd', 'eth-usd']:
-        url = f'https://br.investing.com/crypto/{symbol.split("-")[0]}'
+        url = f'https://br.investing.com/crypto/{symbol.split("-")[0]}/{symbol.split("-")[1]}'
     elif category in ['USA', 'Asia/Pacifico', 'Europa']:
         url = f'https://br.investing.com/indices/{symbol}'
     else:
         url = f'https://br.investing.com/commodities/{symbol}'
-    headers = {'User-Agent': 'Mozilla/5.0'}
+    
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
     try:
         r = requests.get(url, headers=headers, timeout=20)
         soup = BeautifulSoup(r.text, 'html.parser')
-        price_elem = soup.find('div', {'data-test': 'instrument-price-last'}).text.strip()
-        change = soup.find('span', {'data-test': 'instrument-price-change-percent'}).text.strip()
-        num = re.sub(r'[^\d.-]', '', change.replace(',', '.'))
-        return {'Symbol': name, 'Last Price': clean_price(price), '1d Change (%)': round(float(num or 0), 2)}
+        price = soup.find('div', {'data-test': 'instrument-price-last'})
+        change = soup.find('span', {'data-test': 'instrument-price-change-percent'})
+        if not price or not change:
+            return {'Symbol': name, 'Last Price': 'N/D', '1d Change (%)': 0.0}
+        price_txt = price.text.strip()
+        change_txt = change.text.strip()
+        num = re.sub(r'[^\d.-]', '', change_txt.replace(',', '.'))
+        return {'Symbol': name, 'Last Price': clean_price(price_txt), '1d Change (%)': round(float(num or 0), 2)}
     except:
         return {'Symbol': name, 'Last Price': 'Erro', '1d Change (%)': 0.0}
 
 def agrupar_forex(data):
-    grupos = { 'Dólar Americano': [], 'Euro': [], 'Libra Esterlina': [], 'Iene Japonês': [],
+    grupos = {
+        'Dólar Americano': [], 'Euro': [], 'Libra Esterlina': [], 'Iene Japonês': [],
         'Dólar Australiano': [], 'Dólar Neozelandês': [], 'Dólar Canadense': [],
-        'Franco Suíço': [], 'Real Brasileiro': [], 'Yuan Chinês': [] }
-    base_map = { 'USD': 'Dólar Americano', 'EUR': 'Euro', 'GBP': 'Libra Esterlina', 'JPY': 'Iene Japonês',
+        'Franco Suíço': [], 'Real Brasileiro': [], 'Yuan Chinês': []
+    }
+    base_map = {
+        'USD': 'Dólar Americano', 'EUR': 'Euro', 'GBP': 'Libra Esterlina', 'JPY': 'Iene Japonês',
         'AUD': 'Dólar Australiano', 'NZD': 'Dólar Neozelandês', 'CAD': 'Dólar Canadense',
-        'CHF': 'Franco Suíço', 'BRL': 'Real Brasileiro', 'CNY': 'Yuan Chinês' }
+        'CHF': 'Franco Suíço', 'BRL': 'Real Brasileiro', 'CNY': 'Yuan Chinês'
+    }
     for item in data:
         if '/' in item['Symbol']:
             base = item['Symbol'].split('/')[0]
@@ -164,10 +174,10 @@ def grafico_forca(data):
     media = df.groupby('Base')['1d Change (%)'].mean().round(2).sort_values(ascending=False)
     fig = px.bar(media.reset_index(), x='Base', y='1d Change (%)', color='1d Change (%)',
                  color_continuous_scale=['red','orange','lightgray','lightgreen','green'],
-                 text='1d Change (%)', title='Força Relativa das Moedas')
+                 text='1d Change (%)', title='Força Relativa das Moedas (1 dia)')
     fig.update_traces(texttemplate='%{text}%', textposition='outside')
     fig.add_hline(y=0, line_color='white', line_width=2)
-    fig.update_layout(height=500, showlegend=False)
+    fig.update_layout(height=500, showlegend=False, xaxis={'categoryorder': 'total descending'})
     return fig
 
 def estilizar(df):
@@ -192,7 +202,7 @@ def fetch_all():
     unique = [r for r in results if r['Symbol'] not in seen and not seen.add(r['Symbol'])]
     return unique
 
-# ==================== NOTÍCIAS (ATUALIZA A CADA 60s) ====================
+# ====================== NOTÍCIAS AO VIVO ======================
 @st.cache_data(ttl=60, show_spinner=False)
 def carregar_noticias():
     global vistas
@@ -205,91 +215,104 @@ def carregar_noticias():
         "https://br.investing.com/rss/news.rss",
         "https://einvestidor.estadao.com.br/feed/",
         "https://investnews.com.br/feed/",
-        "https://bmcnews.com.br/feed/",
     ]
     for url in feeds:
         try:
             feed = feedparser.parse(url)
-            for entry in feed.entries[:15]:
-                link = entry.link
+            for entry in feed.entries[:12]:
+                link = entry.link.strip()
                 if link in vistas: continue
-                titulo = entry.title
+                titulo = entry.title.strip()
                 try:
-                    if any(p in titulo.lower() for p in ["fed", "ecb", "cpi", "powell", "dollar", "rate"]):
+                    if any(kw in titulo.lower() for kw in ["fed", "cpi", "powell", "ecb", "dollar", "rate"]):
                         titulo = GoogleTranslator(source='en', target='pt').translate(titulo)
                 except: pass
-                data = entry.get('published', 'Agora')[:16].replace('T', ' ')
-                fonte = feed.feed.get('title', '').split('-')[0].strip()
+                data = entry.get('published', '')[:16].replace('T', ' ') or "Agora"
+                fonte = feed.feed.get('title', 'Fonte').split('-')[0].strip()
                 novas.append({'titulo': titulo, 'link': link, 'fonte': fonte, 'data': data})
                 vistas.add(link)
         except: continue
     salvar_vistas(vistas)
-    return novas[:40]
+    return novas[:30]
 
-# ==================== LOOP PRINCIPAL ====================
-tab_cotacoes, tab_noticias = st.tabs(["Cotações ao Vivo", "Notícias"])
+# ====================== LOOP PRINCIPAL ======================
+tab_cotacoes, tab_noticias = st.tabs(["Cotações ao Vivo", "Notícias ao Vivo"])
 
-with tab_cotacoes:
-    placeholder = st.empty()
-
-with tab_noticias:
-    news_placeholder = st.empty()
+placeholder_cot = st.empty()
+placeholder_news = st.empty()
 
 tz_brasil = timedelta(hours=-3)
 
 while True:
     inicio = time.time()
 
-    # === COTAÇÕES ===
-    with placeholder.container():
+    # ==================== COTAÇÕES ====================
+    with placeholder_cot.container():
         dados = fetch_all()
         agora = datetime.now() + tz_brasil
-        st.markdown(f"**Atualizado:** {agora.strftime('%d/%m/%Y %H:%M:%S')} • {time.time()-inicio:.1f}s")
+
+        st.markdown(f"**Atualizado:** {agora.strftime('%d/%m/%Y %H:%M:%S')} (Brasília) • Tempo: {time.time()-inicio:.1f}s")
         st.markdown("---")
 
+        # Gráfico de força
         fig = grafico_forca(dados)
-        if fig: st.plotly_chart(fig, use_container_width=True); st.markdown("---")
+        if fig:
+            st.plotly_chart(fig, use_container_width=True)
+            st.markdown("---")
 
-        st.header("Forex")
-        forex = [x for x in dados if '/' in x['Symbol']]
-        grupos = agrupar_forex(forex)
+        # Forex
+        st.header("Forex - Pares de Moedas")
+        forex_data = [x for x in dados if '/' in x['Symbol']]
+        grupos = agrupar_forex(forex_data)
         cols = st.columns(4)
-        ordem = ['Dólar Americano', 'Euro', 'Libra Esterlina', 'Iene Japonês', 'Dólar Australiano', 'Dólar Neozelandês', 'Dólar Canadense', 'Franco Suíço', 'Real Brasileiro', 'Yuan Chinês']
+        ordem = ['Dólar Americano', 'Euro', 'Libra Esterlina', 'Iene Japonês', 'Dólar Australiano',
+                 'Dólar Neozelandês', 'Dólar Canadense', 'Franco Suíço', 'Real Brasileiro', 'Yuan Chinês']
         i = 0
-        for g in ordem:
-            if g in grupos and grupos[g]:
-                with cols[i%4]:
-                    df = pd.DataFrame(grupos[g])[ ['Symbol','Last Price','1d Change (%)'] ].set_index('Symbol')
-                    st.subheader(g)
+        for titulo in ordem:
+            if titulo in grupos and grupos[titulo]:
+                with cols[i % 4]:
+                    df = pd.DataFrame(grupos[titulo])[ ['Symbol','Last Price','1d Change (%)'] ].set_index('Symbol')
+                    st.subheader(titulo)
                     st.dataframe(estilizar(df), use_container_width=True)
                 i += 1
         st.markdown("---")
+
+        # Outros ativos
         st.header("Outros Ativos")
         outros = [x for x in dados if '/' not in x['Symbol']]
         cols2 = st.columns(4)
         cats = {'USA':[], 'Asia/Pacifico':[], 'Europa':[], 'Commodities':[], 'Crypto':[]}
         for item in outros:
-            for c,n in assets.items():
-                if c=='Forex': continue
-                if item['Symbol'] in n.values(): cats[c].append(item); break
-        i=0
-        for c in ['USA','Asia/Pacifico','Europa','Commodities','Crypto']:
-            if cats[c]:
-                with cols2[i%4]:
-                    df = pd.DataFrame(cats[c])[ ['Symbol','Last Price','1d Change (%)'] ].set_index('Symbol')
-                    st.subheader(c.replace('/', ' / '))
+            for c, itens in assets.items():
+                if c == 'Forex': continue
+                if item['Symbol'] in itens.values():
+                    cats[c].append(item)
+                    break
+        i = 0
+        for cat in ['USA','Asia/Pacifico','Europa','Commodities','Crypto']:
+            if cats[cat]:
+                with cols2[i % 4]:
+                    df = pd.DataFrame(cats[cat])[ ['Symbol','Last Price','1d Change (%)'] ].set_index('Symbol')
+                    st.subheader(cat.replace('/', ' / '))
                     st.dataframe(estilizar(df), use_container_width=True)
-                i+=1
+                i += 1
 
+        # Botão de download (fora do loop com key única)
         csv = pd.DataFrame(dados).to_csv(index=False).encode('utf-8')
-        st.download_button("Baixar CSV", csv, "cotacoes.csv", "text/csv")
+        st.download_button(
+            label="Baixar todos os dados (CSV)",
+            data=csv,
+            file_name=f"cotacoes_{agora.strftime('%Y%m%d_%H%M')}.csv",
+            mime="text/csv",
+            key=f"btn_{int(time.time())}"  # key muda a cada atualização
+        )
 
-    # === NOTÍCIAS ===
-    with news_placeholder.container():
+    # ==================== NOTÍCIAS ====================
+    with placeholder_news.container():
         noticias = carregar_noticias()
-        st.header("Notícias Financeiras")
+        st.header("Notícias Financeiras ao Vivo")
         if not noticias:
-            st.info("Aguarde novas notícias...")
+            st.info("Nenhuma notícia nova no momento... atualizando em 60s")
         else:
             st.success(f"{len(noticias)} notícias novas")
             for n in noticias:
