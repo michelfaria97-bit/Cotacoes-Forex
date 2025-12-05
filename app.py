@@ -235,85 +235,88 @@ def fetch_all():
 
 # ====================== NOTÍCIAS — FORÇANDO ORDEM CORRETA (TUDO) ======================
 def carregar_noticias_frescas():
-    [
-    "https://br.investing.com/rss/market_overview_Technical.rss",
-    "https://br.investing.com/rss/stock.rss",
-    "https://bmcnews.com.br/feed/",
-    "https://www.bloomberglinea.com.br/arc/outboundfeeds/rss.xml",
-    "https://einvestidor.estadao.com.br/feed/",
-    "https://www.infomoney.com.br/feed/",
-    "https://investnews.com.br/feed/",
-    "https://br.advfn.com/jornal/rss",
-    "https://www.infomoney.com.br/mercados/feed/",
-    "https://borainvestir.b3.com.br/noticias/mercado/feed/",
-    "https://www.moneytimes.com.br/mercados/feed/",
-    "https://www.infomoney.com.br/onde-investir/feed/",
-    "https://www.bcb.gov.br/api/feed/sitebcb/sitefeeds/cambio",
-    "https://www.bcb.gov.br/api/feed/sitebcb/sitefeeds/focus",
-    "https://www.bomdiamercado.com.br/feed/",
-    "https://timesbrasil.com.br/feed/",
-    "https://br.investing.com/rss/news.rss",
-    "https://cms.zerohedge.com/fullrss2.xml",
-    "https://cbn.globo.com/rss/cbn/",
-    "https://valor.globo.com/rss/valor",
-    "http://pox.globo.com/rss/valor",
-    "https://pox.globo.com/rss/valorinveste/",
-    "https://www.seudinheiro.com/feed/",
-    "https://www.barchart.com/news/authors/rss",
-    "https://investinglive.com/feed",
-    "https://feeds.feedburner.com/barchartnews"
+    todas = []  # Lista que vai receber TODAS as notícias de todos os feeds
+
+    feeds = [
+        "https://br.investing.com/rss/market_overview_Technical.rss",
+        "https://br.investing.com/rss/stock.rss",
+        "https://bmcnews.com.br/feed/",
+        "https://www.bloomberglinea.com.br/arc/outboundfeeds/rss.xml",
+        "https://einvestidor.estadao.com.br/feed/",
+        "https://www.infomoney.com.br/feed/",
+        "https://investnews.com.br/feed/",
+        "https://br.advfn.com/jornal/rss",
+        "https://www.infomoney.com.br/mercados/feed/",
+        "https://borainvestir.b3.com.br/noticias/mercado/feed/",
+        "https://www.moneytimes.com.br/mercados/feed/",
+        "https://www.infomoney.com.br/onde-investir/feed/",
+        "https://www.bcb.gov.br/api/feed/sitebcb/sitefeeds/cambio",
+        "https://www.bcb.gov.br/api/feed/sitebcb/sitefeeds/focus",
+        "https://www.bomdiamercado.com.br/feed/",
+        "https://timesbrasil.com.br/feed/",
+        "https://br.investing.com/rss/news.rss",
+        "https://cms.zerohedge.com/fullrss2.xml",
+        "https://cbn.globo.com/rss/cbn/",
+        "https://valor.globo.com/rss/valor",
+        "http://pox.globo.com/rss/valor",
+        "https://pox.globo.com/rss/valorinveste/",
+        "https://www.seudinheiro.com/feed/",
+        "https://www.barchart.com/news/authors/rss",
+        "https://investinglive.com/feed",
+        "https://feeds.feedburner.com/barchartnews"
     ]
+
     for url in feeds:
-            try:
-                feed = feedparser.parse(url)
-                for entry in feed.entries:
-                    link = entry.link.strip()
-                    titulo = entry.title.strip()
-                    
-                # Lógica de Tradução Melhorada:
+        try:
+            feed = feedparser.parse(url)
+            for entry in feed.entries:
+                link = entry.link.strip()
+                titulo = entry.title.strip()
+
+                # Tradução automática para notícias em inglês (ZeroHedge, Barchart, Investing news, etc.)
                 try:
                     if any(kw in url for kw in ["investing.com/rss/news.rss", "zerohedge", "barchart"]) or \
-                        any(kw in titulo.lower() for kw in ["fed", "cpi", "powell", "ecb", "rate", "inflation", "stock", "oil", "market"]):
+                       any(kw in titulo.lower() for kw in ["fed", "cpi", "powell", "ecb", "rate", "inflation", "stock", "oil", "market", "nasdaq", "dow"]):
                         titulo = GoogleTranslator(source='en', target='pt').translate(titulo)
-                except: pass
-                
-                    data_raw = entry.get('published') or entry.get('updated') or ""
-                    try:
-                        data = datetime.strptime(data_raw[:19], "%Y-%m-%dT%H:%M:%S").strftime("%d/%m %H:%M")
-                    except:
-                        data = "Agora"
-                        
-                    fonte = feed.feed.get('title', 'Fonte desconhecida').split('-')[0].strip()
-                    
-                    # Usa o timestamp real do feed quando disponível, senão time.time()
-                    published_time = entry.get('published_parsed') or entry.get('updated_parsed')
-                    if published_time:
-                        ts = time.mktime(published_time)
-                    else:
-                        ts = time.time()
-                        
-                    todas.append({
-                        'titulo': titulo,
-                        'link': link,
-                        'fonte': fonte,
-                        'data': data,
-                        'timestamp': ts
-                    })
-            except:
-                continue
-        
-        # ORDENA TODAS AS NOTÍCIAS DO MUNDO POR DATA REAL (mais nova em cima)
-        todas.sort(key=lambda x: x['timestamp'], reverse=True)
-        
-        # Pega só as 100 mais recentes e atualiza o conjunto de vistas
-        mais_recentes = todas[:100]
-        
-        # Atualiza o set de vistas com essas 100 (para evitar duplicar na próxima)
-        global vistas
-        vistas = {item['link'] for item in mais_recentes}
-        salvar_vistas(vistas)
-        
-        return mais_recentes
+                except:
+                    pass
+
+                # Data bonitinha
+                data_raw = entry.get('published') or entry.get('updated') or ""
+                try:
+                    data = datetime.strptime(data_raw[:19], "%Y-%m-%dT%H:%M:%S").strftime("%d/%m %H:%M")
+                except:
+                    data = "Agora"
+
+                # Fonte limpa
+                fonte = feed.feed.get('title', 'Fonte desconhecida').split('-')[0].strip()
+
+                # Timestamp real da notícia (muito mais preciso que time.time())
+                published_time = entry.get('published_parsed') or entry.get('updated_parsed')
+                ts = time.mktime(published_time) if published_time else time.time()
+
+                todas.append({
+                    'titulo': titulo,
+                    'link': link,
+                    'fonte': fonte,
+                    'data': data,
+                    'timestamp': ts
+                })
+        except Exception as e:
+            continue  # se um feed der pau, pula pra próximo
+
+    # Ordena do mais novo pro mais velho
+    todas.sort(key=lambda x: x['timestamp'], reverse=True)
+
+    # Pega só as 100 mais recentes do planeta
+    mais_recentes = todas[:100]
+
+    # Atualiza o conjunto de links já exibidos (evita duplicar na próxima rodada)
+    global vistas
+    vistas = {item['link'] for item in mais_recentes}
+    salvar_vistas(vistas)
+
+    return mais_recentes
 
 # ====================== LOOP PRINCIPAL ======================
 placeholder = st.empty()
@@ -439,6 +442,7 @@ while True:
 
     # Atraso de 60 segundos antes da próxima atualização
     time.sleep(60)
+
 
 
 
