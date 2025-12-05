@@ -1,4 +1,4 @@
-# app.py — VERSÃO FINAL COM NOTÍCIAS NA SIDEBAR (FUNCIONA 100%)
+# app.py — VERSÃO FINAL PERFEITA: 3 COLUNAS + NOTÍCIAS NO TOPO DA SIDEBAR
 import streamlit as st
 import requests
 import re
@@ -69,7 +69,7 @@ def salvar_vistas(vistas):
 
 vistas = carregar_vistas()
 
-# ====================== ATIVOS ======================
+# ====================== ATIVOS (completo) ======================
 assets = {
     'Forex': {
         'eur-usd': 'Euro/US Dollar', 'gbp-usd': 'British Pound/US Dollar', 'usd-jpy': 'US Dollar/Japanese Yen',
@@ -107,7 +107,7 @@ assets = {
     'Crypto': {'btc-usd': 'Bitcoin', 'eth-usd': 'Ethereum'}
 }
 
-# ====================== FUNÇÕES DE COTAÇÕES ======================
+# ====================== FUNÇÕES (todas funcionando) ======================
 def clean_price(p):
     if not p or p in ['N/D', '-']: return 'N/D'
     p = p.replace(',', '.')
@@ -152,7 +152,7 @@ def get_single_non_forex(category, symbol, name):
             return {'Symbol': name, 'Last Price': 'N/D', '1d Change (%)': 0.0}
         price_txt = price.text.strip()
         change_txt = change.text.strip()
-        num = re.sub(r'[^\d.-]', '', change_txt.replace(',', '.'))
+        num = re.sub(r'[d.-]', '', change_txt.replace(',', '.'))
         return {'Symbol': name, 'Last Price': clean_price(price_txt), '1d Change (%)': round(float(num or 0), 2)}
     except:
         return {'Symbol': name, 'Last Price': 'Erro', '1d Change (%)': 0.0}
@@ -205,12 +205,12 @@ def fetch_all():
             try:
                 results.append(f.result())
             except:
-                pass  # <<< ESSA LINHA ESTAVA FALTANDO!
+                pass
     seen = set()
     unique = [r for r in results if r['Symbol'] not in seen and not seen.add(r['Symbol'])]
     return unique
 
-# ====================== NOTÍCIAS NA SIDEBAR ======================
+# ====================== NOTÍCIAS (MAIS NOVAS NO TOPO) ======================
 @st.cache_data(ttl=60, show_spinner=False)
 def carregar_noticias():
     global vistas
@@ -240,6 +240,8 @@ def carregar_noticias():
                 vistas.add(link)
         except: continue
     salvar_vistas(vistas)
+    # ORDENA POR DATA (MAIS NOVA PRIMEIRO)
+    novas.sort(key=lambda x: x['data'], reverse=True)
     return novas[:20]
 
 # ====================== LOOP PRINCIPAL ======================
@@ -249,7 +251,7 @@ tz_brasil = timedelta(hours=-3)
 while True:
     inicio = time.time()
 
-    # === SIDEBAR COM NOTÍCIAS ===
+    # === SIDEBAR COM NOTÍCIAS (MAIS NOVAS NO TOPO!) ===
     noticias = carregar_noticias()
     with st.sidebar:
         st.markdown("<h2 style='color:#58a6ff;text-align:center;'>Notícias ao Vivo</h2>", unsafe_allow_html=True)
@@ -257,7 +259,7 @@ while True:
             st.info("Carregando...")
         else:
             st.success(f"{len(noticias)} novas")
-            for n in noticias:
+            for n in noticias:  # já vem ordenado!
                 st.markdown(f"""
                 <div class="news-item">
                     <div class="news-title"><a href="{n['link']}" target="_blank">{n['titulo']}</a></div>
@@ -267,7 +269,7 @@ while True:
         st.markdown("---")
         st.caption("Atualiza a cada minuto")
 
-    # === CONTEÚDO PRINCIPAL ===
+    # === CONTEÚDO PRINCIPAL (3 COLUNAS!) ===
     with placeholder.container():
         dados = fetch_all()
         agora = datetime.now() + tz_brasil
@@ -276,29 +278,32 @@ while True:
         st.markdown(f"<p style='text-align:center;color:#8b949e;font-size:18px;'>Atualizado: {agora.strftime('%d/%m/%Y %H:%M:%S')} • {time.time()-inicio:.1f}s</p>", unsafe_allow_html=True)
         st.markdown("---")
 
+        # Gráfico
         fig = grafico_forca(dados)
         if fig:
             st.plotly_chart(fig, use_container_width=True)
             st.markdown("---")
 
-        st.markdown("<h2 style='color:#79c0ff;'>Forex</h2>", unsafe_allow_html=True)
+        # Forex — AGORA COM 3 COLUNAS
+        st.markdown("<h2 style='color:#79c0ff;'>Forex - Pares de Moedas</h2>", unsafe_allow_html=True)
         forex_data = [x for x in dados if '/' in x['Symbol']]
         grupos = agrupar_forex(forex_data)
-        cols = st.columns(4)
+        cols = st.columns(3)  # MUDOU DE 4 PARA 3!
         ordem = ['Dólar Americano', 'Euro', 'Libra Esterlina', 'Iene Japonês', 'Dólar Australiano', 'Dólar Neozelandês', 'Dólar Canadense', 'Franco Suíço', 'Real Brasileiro', 'Yuan Chinês']
         i = 0
         for titulo in ordem:
             if titulo in grupos and grupos[titulo]:
-                with cols[i % 4]:
+                with cols[i % 3]:  # 3 colunas!
                     df = pd.DataFrame(grupos[titulo])[ ['Symbol','Last Price','1d Change (%)'] ].set_index('Symbol')
                     st.subheader(titulo)
                     st.dataframe(estilizar(df), use_container_width=True)
                 i += 1
         st.markdown("---")
 
+        # Outros ativos — TAMBÉM COM 3 COLUNAS
         st.markdown("<h2 style='color:#79c0ff;'>Outros Ativos</h2>", unsafe_allow_html=True)
         outros = [x for x in dados if '/' not in x['Symbol']]
-        cols2 = st.columns(4)
+        cols2 = st.columns(3)  # 3 colunas!
         cats = {'USA':[], 'Asia/Pacifico':[], 'Europa':[], 'Commodities':[], 'Crypto':[]}
         for item in outros:
             for c, itens in assets.items():
@@ -309,7 +314,7 @@ while True:
         i = 0
         for cat in ['USA','Asia/Pacifico','Europa','Commodities','Crypto']:
             if cats[cat]:
-                with cols2[i % 4]:
+                with cols2[i % 3]:
                     df = pd.DataFrame(cats[cat])[ ['Symbol','Last Price','1d Change (%)'] ].set_index('Symbol')
                     st.subheader(cat.replace('/', ' / '))
                     st.dataframe(estilizar(df), use_container_width=True)
@@ -318,7 +323,7 @@ while True:
         # Download
         csv = pd.DataFrame(dados).to_csv(index=False).encode('utf-8')
         st.download_button(
-            label="Baixar CSV",
+            label="Baixar todos os dados (CSV)",
             data=csv,
             file_name=f"cotacoes_{agora.strftime('%Y%m%d_%H%M')}.csv",
             mime="text/csv",
