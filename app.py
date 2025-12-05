@@ -109,15 +109,15 @@ assets = {
     }
 }
 
-# ====================== FUNÇÕES DE COTAÇÕES (ATUALIZADO COM EQUITIES) ======================
+# ====================== FUNÇÕES DE COTAÇÕES ======================
 def clean_price(p):
-    if not p or p in ['N/D', '-']: return 'N/D'
-    p = p.replace(',', '.')
-    parts = p.split('.')
-    if len(parts) > 2:
-        p = ''.join(parts[:-1]) + '.' + parts[-1]
-    try: return str(float(p))
-    except: return p
+    if not p or p in ['N/D', '-']: return 'N/D'
+    p = p.replace(',', '.')
+    parts = p.split('.')
+    if len(parts) > 2:
+        p = ''.join(parts[:-1]) + '.' + parts[-1]
+    try: return str(float(p))
+    except: return p
 
 def get_single_forex(symbol, _):
     url = f'https://br.investing.com/currencies/{symbol}'
@@ -372,6 +372,7 @@ while True:
         )
 
     time.sleep(60)
+
 
 
 
