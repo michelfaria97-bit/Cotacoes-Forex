@@ -1,4 +1,4 @@
-# app.py — VERSÃO FINAL: LIMPA DE ERROS DE SINTAXE E COM TODAS AS FUNÇÕES SOLICITADAS
+# app.py — COTAÇÕES + NOTÍCIAS AO VIVO COM SCROLL INFINITO (IGUAL MARKETWATCH)
 import streamlit as st
 import requests
 import re
@@ -20,26 +20,56 @@ st.set_page_config(
     page_icon="Chart"
 )
 
-# ====================== ESTILO ======================
+# ====================== ESTILO + SCROLL SUAVE ======================
 st.markdown("""
 <style>
     .main { background-color: #0e1117; }
-    .sidebar .sidebar-content { background-color: #161b22; }
+    .sidebar .sidebar-content { background-color: #161b22; padding-top: 1rem; }
+    .news-container { 
+        position: relative; 
+        overflow: hidden; 
+        height: 85vh; 
+        margin-top: 10px;
+    }
+    .news-list { 
+        animation: scroll 140s linear infinite;
+    }
+    @keyframes scroll {
+        0%   { transform: translateY(0); }
+        100% { transform: translateY(-50%); }
+    }
     .news-item {
-        padding: 14px;
+        padding: 16px 12px;
         border-bottom: 1px solid #30363d;
         transition: all 0.2s;
     }
-    .news-item:hover { background:#21262d; padding-left:18px; }
-    .news-title a { color:#58a6ff; text-decoration:none; font-weight:600; font-size:15px; line-height:1.4; }
-    .news-title a:hover { color:#79c0ff; text-decoration:underline; }
-    .news-meta { font-size:12px; color:#8b949e; margin-top:6px; }
-    .stDataFrame { width: 100% !important; }
-    [data-testid="column"] { padding: 8px !important; }
+    .news-item:hover { 
+        background:#21262d; 
+        padding-left:18px; 
+    }
+    .news-title a { 
+        color:#58a6ff; 
+        text-decoration:none; 
+        font-weight:600; 
+        font-size:15px; 
+        line-height:1.45; 
+        display:block;
+    }
+    .news-title a:hover { 
+        color:#79c0ff; 
+        text-decoration:underline; 
+    }
+    .news-meta { 
+        font-size:12px; 
+        color:#8b949e; 
+        margin-top:6px; 
+    }
+    .news-duplicate { opacity: 0; pointer-events: none; } /* para loop infinito */
+    .footer-text { text-align:center; color:#666; font-size:0.8em; margin-top:15px; }
 </style>
 """, unsafe_allow_html=True)
 
-# ====================== CACHE DE NOTÍCIAS ======================
+# ====================== CACHE DE NOTÍCIAS VISTAS ======================
 CACHE_FILE = ".streamlit/noticias_vistas.json"
 if not os.path.exists(".streamlit"):
     os.makedirs(".streamlit", exist_ok=True)
@@ -62,7 +92,7 @@ def salvar_vistas(vistas):
 
 vistas = carregar_vistas()
 
-# ====================== ATIVOS COMPLETOS (ATUALIZADO COM MAG 7) ======================
+# ====================== ATIVOS ======================
 assets = {
     'Forex': {
         'eur-usd': 'Euro/US Dollar', 'gbp-usd': 'British Pound/US Dollar', 'usd-jpy': 'US Dollar/Japanese Yen',
@@ -98,19 +128,13 @@ assets = {
     'Commodities': {'gold': 'Gold', 'silver': 'Silver', 'platinum': 'Platinum', 'copper': 'Copper',
                     'crude-oil': 'Crude Oil (WTI)', 'brent-oil': 'Brent Oil', 'natural-gas': 'Natural Gas'},
     'Crypto': {'btc-usd': 'Bitcoin', 'eth-usd': 'Ethereum'},
-    # MAGNIFICENT 7
     'Mag 7': {
-        'google-inc-c': 'GOOG',
-        'microsoft-corp': 'MSFT',
-        'amazon-com-inc': 'AMZN',
-        'apple-computer-inc': 'AAPL',
-        'facebook-inc': 'META',
-        'nvidia-corp': 'NVDA',
-        'tesla-motors': 'TSLA'
+        'google-inc-c': 'GOOG', 'microsoft-corp': 'MSFT', 'amazon-com-inc': 'AMZN',
+        'apple-computer-inc': 'AAPL', 'facebook-inc': 'META', 'nvidia-corp': 'NVDA', 'tesla-motors': 'TSLA'
     }
 }
 
-# ====================== FUNÇÕES DE COTAÇÕES ======================
+# ====================== FUNÇÕES DE COTAÇÃO ======================
 def clean_price(p):
     if not p or p in ['N/D', '-']: return 'N/D'
     p = p.replace(',', '.')
@@ -138,20 +162,17 @@ def get_single_forex(symbol, _):
 def get_single_non_forex(category, symbol, name):
     if symbol == 'usdollar':
         url = 'https://br.investing.com/indices/usdollar'
-    elif symbol == 'btc-usd':
-        url = 'https://br.investing.com/crypto/bitcoin/btc-usd'
-    elif symbol == 'eth-usd':
-        url = 'https://br.investing.com/crypto/ethereum/eth-usd'
+    elif symbol in ['btc-usd', 'eth-usd']:
+        url = f'https://br.investing.com/crypto/{symbol.split("-")[0]}/{symbol}'
     elif '-futures' in symbol:
         url = f'https://br.investing.com/indices/{symbol}'
     elif category == 'Commodities':
         url = f'https://br.investing.com/commodities/{symbol}'
-    elif category == 'Mag 7': # Corrigido para Ações (Equities)
+    elif category == 'Mag 7':
         url = f'https://br.investing.com/equities/{symbol}'
     else:
         url = f'https://br.investing.com/indices/{symbol}'
-
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+    headers = {'User-Agent': 'Mozilla/5.0'}
     try:
         r = requests.get(url, headers=headers, timeout=25)
         soup = BeautifulSoup(r.text, 'html.parser')
@@ -189,8 +210,8 @@ def grafico_forca(data):
     df['Base'] = df['Symbol'].str.split('/').str[0]
     media = df.groupby('Base')['1d Change (%)'].mean().round(2).sort_values(ascending=False)
     fig = px.bar(media.reset_index(), x='Base', y='1d Change (%)', color='1d Change (%)',
-                  color_continuous_scale=['red','orange','lightgray','lightgreen','green'],
-                  text='1d Change (%)', title='Força Relativa das Moedas (1 dia)')
+                 color_continuous_scale=['red','orange','lightgray','lightgreen','green'],
+                 text='1d Change (%)', title='Força Relativa das Moedas (1 dia)')
     fig.update_traces(texttemplate='%{text}%', textposition='outside')
     fig.add_hline(y=0, line_color='white', line_width=2)
     fig.update_layout(height=500, showlegend=False, xaxis={'categoryorder': 'total descending'})
@@ -198,7 +219,7 @@ def grafico_forca(data):
 
 def estilizar(df):
     return df.style.format({'1d Change (%)': '{:.2f}%'}) \
-        .map(lambda x: f"color: {'green' if x>0 else 'red' if x<0 else 'gray'}; font-weight: bold", subset=['1d Change (%)'])
+        .map(lambda x: f"color: {'#00ff00' if x>0 else '#ff4444' if x<0 else '#cccccc'}; font-weight: bold", subset=['1d Change (%)'])
 
 @st.cache_data(ttl=55)
 def fetch_all():
@@ -207,7 +228,6 @@ def fetch_all():
         futures = []
         for symbol, name in assets['Forex'].items():
             futures.append(executor.submit(get_single_forex, symbol, name))
-        # Loop atualizado para incluir 'Mag 7'
         for cat in ['USA', 'Asia/Pacifico', 'Europa', 'Commodities', 'Crypto', 'Mag 7']:
             for symbol, name in assets[cat].items():
                 futures.append(executor.submit(get_single_non_forex, cat, symbol, name))
@@ -220,110 +240,97 @@ def fetch_all():
     unique = [r for r in results if r['Symbol'] not in seen and not seen.add(r['Symbol'])]
     return unique
 
-# ====================== NOTÍCIAS — FORÇANDO ORDEM CORRETA (TUDO) ======================
+# ====================== NOTÍCIAS ======================
 def carregar_noticias_frescas():
     global vistas
     novas = []
     feeds = [
-    "https://br.investing.com/rss/market_overview_Technical.rss",
-    "https://br.investing.com/rss/stock.rss",
-    "https://bmcnews.com.br/feed/",
-    "https://www.bloomberglinea.com.br/arc/outboundfeeds/rss.xml",
-    "https://einvestidor.estadao.com.br/feed/",
-    "https://www.infomoney.com.br/feed/",
-    "https://investnews.com.br/feed/",
-    "https://br.advfn.com/jornal/rss",
-    "https://www.infomoney.com.br/mercados/feed/",
-    "https://borainvestir.b3.com.br/noticias/mercado/feed/",
-    "https://www.moneytimes.com.br/mercados/feed/",
-    "https://www.infomoney.com.br/onde-investir/feed/",
-    "https://www.bcb.gov.br/api/feed/sitebcb/sitefeeds/cambio",
-    "https://www.bcb.gov.br/api/feed/sitebcb/sitefeeds/focus",
-    "https://www.bomdiamercado.com.br/feed/",
-    "https://timesbrasil.com.br/feed/",
-    "https://br.investing.com/rss/news.rss",
-    "https://cms.zerohedge.com/fullrss2.xml",
-    "https://cbn.globo.com/rss/cbn/",
-    "https://valor.globo.com/rss/valor",
-    "http://pox.globo.com/rss/valor",
-    "https://pox.globo.com/rss/valorinveste/",
-    "https://www.seudinheiro.com/feed/",
-    "https://www.barchart.com/news/authors/rss",
-    "https://investinglive.com/feed",
-    "https://feeds.feedburner.com/barchartnews"
+        "https://br.investing.com/rss/market_overview_Technical.rss",
+        "https://br.investing.com/rss/stock.rss",
+        "https://bmcnews.com.br/feed/",
+        "https://www.bloomberglinea.com.br/arc/outboundfeeds/rss.xml",
+        "https://einvestidor.estadao.com.br/feed/",
+        "https://www.infomoney.com.br/feed/",
+        "https://investnews.com.br/feed/",
+        "https://br.advfn.com/jornal/rss",
+        "https://www.infomoney.com.br/mercados/feed/",
+        "https://borainvestir.b3.com.br/noticias/mercado/feed/",
+        "https://www.moneytimes.com.br/mercados/feed/",
+        "https://www.bcb.gov.br/api/feed/sitebcb/sitefeeds/cambio",
+        "https://www.bcb.gov.br/api/feed/sitebcb/sitefeeds/focus",
+        "https://www.bomdiamercado.com.br/feed/",
+        "https://br.investing.com/rss/news.rss",
+        "https://cms.zerohedge.com/fullrss2.xml",
+        "https://valor.globo.com/rss/valor",
+        "https://www.seudinheiro.com/feed/",
+        "https://feeds.feedburner.com/barchartnews"
     ]
     for url in feeds:
         try:
             feed = feedparser.parse(url)
-            for entry in feed.entries: # Pega todas as notícias do feed (sem limite [:12])
+            for entry in feed.entries:
                 link = entry.link.strip()
                 if link in vistas: continue
                 titulo = entry.title.strip()
-                
-                # Lógica de Tradução Melhorada:
-                try:
-                    if any(kw in url for kw in ["investing.com/rss/news.rss", "zerohedge", "barchart"]) or \
-                        any(kw in titulo.lower() for kw in ["fed", "cpi", "powell", "ecb", "rate", "inflation", "stock", "oil", "market"]):
+                # Traduz apenas notícias em inglês
+                if any(x in url for x in ["zerohedge", "barchart", "investing.com/rss/news"]):
+                    try:
                         titulo = GoogleTranslator(source='en', target='pt').translate(titulo)
-                except: pass
-                
+                    except: pass
                 data_raw = entry.get('published') or entry.get('updated') or ""
                 try:
-                    data = datetime.strptime(data_raw[:19], "%Y-%m-%dT%H:%M:%S").strftime("%d/%m %H:%M")
+                    data = datetime.strptime(data_raw[:19], "%Y-%m-%dT%H:%M:%S").strftime("%H:%M")
                 except:
                     data = "Agora"
                 fonte = feed.feed.get('title', 'Fonte').split('-')[0].strip()
-                novas.append({
-                    'titulo': titulo,
-                    'link': link,
-                    'fonte': fonte,
-                    'data': data,
-                    'timestamp': time.time()  # GARANTE ORDEM CORRETA
-                })
+                novas.append({'titulo': titulo, 'link': link, 'fonte': fonte, 'data': data, 'ts': time.time()})
                 vistas.add(link)
         except: continue
     salvar_vistas(vistas)
-    # ORDENA SEMPRE POR TIMESTAMP DESCENDENTE E LIMITA A 100 NA SIDEBAR
-    novas.sort(key=lambda x: x['timestamp'], reverse=True)
-    return novas[:100]
+    novas.sort(key=lambda x: x['ts'], reverse=True)
+    return novas[:90]  # quantidade ideal pro scroll ficar bonito
 
 # ====================== LOOP PRINCIPAL ======================
 placeholder = st.empty()
-tz_brasil = timedelta(hours=-3)
+ultima_atualizacao = 0
 
 while True:
-    inicio = time.time()
+    agora = time.time()
 
-    # === SIDEBAR: NOTÍCIAS MAIS NOVAS NO TOPO ===
-    noticias = carregar_noticias_frescas()  # função sem cache para forçar atualização
+    # Atualiza notícias a cada 60 segundos
+    if agora - ultima_atualizacao >= 60:
+        noticias = carregar_noticias_frescas()
+        ultima_atualizacao = agora
+
+    # Sidebar com scroll infinito
     with st.sidebar:
-        st.markdown("<h2 style='color:#58a6ff;text-align:center;'>Notícias ao Vivo</h2>", unsafe_allow_html=True)
+        st.markdown("<h2 style='color:#58a6ff; text-align:center; margin-bottom:0;'>Notícias ao Vivo</h2>", unsafe_allow_html=True)
         
-        if not noticias:
-            st.info("Carregando...")
-        else:
-            # === PRIMEIRO: todas as notícias (mais nova no topo) ===
-            for n in noticias:
-                st.markdown(f"""
-                <div class="news-item" style="margin-bottom: 12px;">
-                    <div class="news-title"><a href="{n['link']}" target="_blank">{n['titulo']}</a></div>
-                    <div class="news-meta" style="font-size:0.85em;color:#8b949e;">{n['fonte']} • {n['data']}</div>
-                </div>
-                <hr style="border-top:1px solid #30363d;margin:8px 0;">
-                """, unsafe_allow_html=True)
-            
-            # === DEPOIS: contador verde e rodapé (ficam sempre embaixo) ===
-            st.success(f"{len(noticias)} novas")
-            st.markdown("---")
-            st.caption("Atualiza a cada minuto")
+        # Duplica para loop infinito
+        noticias_loop = noticias + noticias
+        
+        html = "<div class='news-container'><div class='news-list'>"
+        for i, n in enumerate(noticias_loop):
+            extra = " news-duplicate" if i >= len(noticias) else ""
+            html += f"""
+            <div class="news-item{extra}">
+                <div class="news-title"><a href="{n['link']}" target="_blank">{n['titulo']}</a></div>
+                <div class="news-meta">{n['fonte']} • {n['data']}</div>
+            </div>
+            """
+        html += "</div></div>"
+        html += "<div class='footer-text'>Atualiza automaticamente</div>"
+        
+        st.markdown(html, unsafe_allow_html=True)
 
-    # === CONTEÚDO PRINCIPAL ===
+    # Conteúdo principal
     with placeholder.container():
         dados = fetch_all()
-        agora = datetime.now() + tz_brasil
-
+        tz = timedelta(hours=-3)
+        agora_dt = datetime.now() + tz
+        
         st.markdown(f"<h1 style='text-align:center;color:#58a6ff;'>COTAÇÕES AO VIVO</h1>", unsafe_allow_html=True)
-        st.markdown(f"<p style='text-align:center;color:#8b949e;font-size:18px;'>Atualizado: {agora.strftime('%d/%m/%Y %H:%M:%S')} • {time.time()-inicio:.1f}s</p>", unsafe_allow_html=True)
+        st.markdown(f"<p style='text-align:center;color:#8b949e;font-size:18px;'>Atualizado: {agora_dt.strftime('%d/%m/%Y %H:%M:%S')}</p>", unsafe_allow_html=True)
         st.markdown("---")
 
         fig = grafico_forca(dados)
@@ -331,11 +338,13 @@ while True:
             st.plotly_chart(fig, use_container_width=True)
             st.markdown("---")
 
+        # Forex
         st.markdown("<h2 style='color:#79c0ff;'>Forex - Pares de Moedas</h2>", unsafe_allow_html=True)
         forex_data = [x for x in dados if '/' in x['Symbol']]
         grupos = agrupar_forex(forex_data)
         cols = st.columns(3)
-        ordem = ['Dólar Americano', 'Euro', 'Libra Esterlina', 'Iene Japonês', 'Dólar Australiano', 'Dólar Neozelandês', 'Dólar Canadense', 'Franco Suíço', 'Real Brasileiro', 'Yuan Chinês']
+        ordem = ['Dólar Americano', 'Euro', 'Libra Esterlina', 'Iene Japonês', 'Dólar Australiano', 
+                 'Dólar Neozelandês', 'Dólar Canadense', 'Franco Suíço', 'Real Brasileiro', 'Yuan Chinês']
         i = 0
         for titulo in ordem:
             if titulo in grupos and grupos[titulo]:
@@ -344,12 +353,11 @@ while True:
                     st.subheader(titulo)
                     st.dataframe(estilizar(df), use_container_width=True)
                 i += 1
-        st.markdown("---")
 
+        st.markdown("---")
         st.markdown("<h2 style='color:#79c0ff;'>Outros Ativos</h2>", unsafe_allow_html=True)
         outros = [x for x in dados if '/' not in x['Symbol']]
         cols2 = st.columns(3)
-        # INCLUIDO Mag 7 na lista de categorias para popular o dicionário
         cats = {'USA':[], 'Mag 7':[], 'Asia/Pacifico':[], 'Europa':[], 'Commodities':[], 'Crypto':[]}
         for item in outros:
             for c, itens in assets.items():
@@ -358,24 +366,22 @@ while True:
                     cats[c].append(item)
                     break
         i = 0
-        # LOOP DE EXIBIÇÃO ATUALIZADO PARA INCLUIR MAG 7 DEPOIS DE USA
         for cat in ['USA', 'Mag 7', 'Asia/Pacifico', 'Europa', 'Commodities', 'Crypto']:
             if cat in cats and cats[cat]:
                 with cols2[i % 3]:
                     df = pd.DataFrame(cats[cat])[ ['Symbol','Last Price','1d Change (%)'] ].set_index('Symbol')
-                    st.subheader(cat.replace('/', ' / '))
+                    titulo = "Magnificent 7" if cat == "Mag 7" else cat
+                    st.subheader(titulo)
                     st.dataframe(estilizar(df), use_container_width=True)
                 i += 1
 
+        # Download CSV
         csv = pd.DataFrame(dados).to_csv(index=False).encode('utf-8')
         st.download_button(
             label="Baixar todos os dados (CSV)",
             data=csv,
-            file_name=f"cotacoes_{agora.strftime('%Y%m%d_%H%M')}.csv",
-            mime="text/csv",
-            key=f"dl_{int(time.time())}"
+            file_name=f"cotacoes_{agora_dt.strftime('%Y%m%d_%H%M')}.csv",
+            mime="text/csv"
         )
 
-    time.sleep(60)
-
-
+    time.sleep(1)
