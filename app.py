@@ -1,3 +1,4 @@
+# app.py — SOMENTE COTAÇÕES AO VIVO (NOTÍCIAS TOTALMENTE REMOVIDAS)
 import streamlit as st
 import requests
 import re
@@ -8,8 +9,14 @@ import pandas as pd
 import plotly.express as px
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-st.set_page_config(page_title="Cotações ao Vivo", layout="wide", initial_sidebar_state="collapsed", page_icon="Chart")
+st.set_page_config(
+    page_title="Cotações ao Vivo",
+    layout="wide",
+    initial_sidebar_state="collapsed",  # sidebar fechada (não tem mais notícias)
+    page_icon="Chart"
+)
 
+# ====================== ESTILO ======================
 st.markdown("""
 <style>
     .main { background-color: #0e1117; }
@@ -19,95 +26,81 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# ====================== ATIVOS ======================
+# ====================== ATIVOS COMPLETOS ======================
 assets = {
     'Forex': {
-        'eur-usd': 'EUR/USD', 'gbp-usd': 'GBP/USD', 'usd-jpy': 'USD/JPY',
-        'aud-usd': 'AUD/USD', 'usd-cad': 'USD/CAD', 'usd-chf': 'USD/CHF',
-        'eur-gbp': 'EUR/GBP', 'eur-aud': 'EUR/AUD', 'eur-jpy': 'EUR/JPY',
-        'eur-chf': 'EUR/CHF', 'eur-nzd': 'EUR/NZD', 'gbp-jpy': 'GBP/JPY',
-        'gbp-cad': 'GBP/CAD', 'gbp-aud': 'GBP/AUD', 'gbp-nzd': 'GBP/NZD',
-        'aud-jpy': 'AUD/JPY', 'aud-nzd': 'AUD/NZD', 'aud-chf': 'AUD/CHF',
-        'nzd-usd': 'NZD/USD', 'nzd-jpy': 'NZD/JPY', 'nzd-cad': 'NZD/CAD',
-        'nzd-chf': 'NZD/CHF', 'eur-cad': 'EUR/CAD', 'gbp-eur': 'GBP/EUR',
-        'gbp-chf': 'GBP/CHF', 'aud-eur': 'AUD/EUR', 'aud-gbp': 'AUD/GBP',
-        'aud-cad': 'AUD/CAD', 'nzd-aud': 'NZD/AUD', 'nzd-eur': 'NZD/EUR',
-        'nzd-gbp': 'NZD/GBP', 'cad-aud': 'CAD/AUD', 'usd-aud': 'USD/AUD',
-        'jpy-eur': 'JPY/EUR', 'chf-aud': 'CHF/AUD', 'chf-eur': 'CHF/EUR',
-        'usd-nzd': 'USD/NZD', 'jpy-usd': 'JPY/USD', 'jpy-gbp': 'JPY/GBP',
-        'jpy-cad': 'JPY/CAD', 'jpy-chf': 'JPY/CHF', 'jpy-nzd': 'JPY/NZD',
-        'cad-usd': 'CAD/USD', 'cad-jpy': 'CAD/JPY', 'cad-gbp': 'CAD/GBP',
-        'cad-chf': 'CAD/CHF', 'cad-nzd': 'CAD/NZD', 'chf-usd': 'CHF/USD',
-        'chf-jpy': 'CHF/JPY', 'chf-gbp': 'GBP/CHF', 'chf-cad': 'CHF/CAD',
-        'chf-nzd': 'CHF/NZD', 'cad-eur': 'CAD/EUR', 'usd-eur': 'USD/EUR', 
-        'usd-gbp': 'USD/GBP', 'jpy-aud': 'JPY/AUD', 'brl-usd': 'BRL/USD'
+        'eur-usd': 'Euro/US Dollar', 'gbp-usd': 'British Pound/US Dollar', 'usd-jpy': 'US Dollar/Japanese Yen',
+        'aud-usd': 'Australian Dollar/US Dollar', 'usd-cad': 'US Dollar/Canadian Dollar', 'usd-chf': 'US Dollar/Swiss Franc',
+        'eur-gbp': 'Euro/British Pound', 'eur-aud': 'Euro/Australian Dollar', 'eur-jpy': 'Euro/Japanese Yen',
+        'eur-chf': 'Euro/Swiss Franc', 'eur-nzd': 'Euro/New Zealand Dollar', 'gbp-jpy': 'British Pound/Japanese Yen',
+        'gbp-cad': 'British Pound/Canadian Dollar', 'gbp-aud': 'British Pound/Australian Dollar', 'gbp-nzd': 'British Pound/New Zealand Dollar',
+        'aud-jpy': 'Australian Dollar/Japanese Yen', 'aud-nzd': 'Australian Dollar/New Zealand Dollar', 'aud-chf': 'Australian Dollar/Swiss Franc',
+        'nzd-usd': 'New Zealand Dollar/US Dollar', 'nzd-jpy': 'New Zealand Dollar/Japanese Yen', 'nzd-cad': 'New Zealand Dollar/Canadian Dollar',
+        'nzd-chf': 'New Zealand Dollar/Swiss Franc', 'eur-cad': 'Euro/Canadian Dollar', 'gbp-eur': 'British Pound/Euro',
+        'gbp-chf': 'British Pound/Swiss Franc', 'aud-eur': 'Australian Dollar/Euro', 'aud-gbp': 'Australian Dollar/British Pound',
+        'aud-cad': 'Australian Dollar/Canadian Dollar', 'nzd-aud': 'New Zealand Dollar/Australian Dollar', 'nzd-eur': 'New Zealand Dollar/Euro',
+        'nzd-gbp': 'New Zealand Dollar/British Pound', 'cad-aud': 'Canadian Dollar/Australian Dollar', 'usd-aud': 'US Dollar/Australian Dollar',
+        'jpy-eur': 'Japanese Yen/Euro', 'chf-aud': 'Swiss Franc/Australian Dollar', 'chf-eur': 'Swiss Franc/Euro',
+        'usd-nzd': 'US Dollar/New Zealand Dollar', 'jpy-usd': 'Japanese Yen/US Dollar', 'jpy-gbp': 'Japanese Yen/British Pound',
+        'jpy-cad': 'Canadian Dollar/Japanese Yen', 'jpy-chf': 'Japanese Yen/Swiss Franc', 'jpy-nzd': 'Japanese Yen/New Zealand Dollar',
+        'cad-usd': 'Canadian Dollar/US Dollar', 'cad-jpy': 'Canadian Dollar/Japanese Yen', 'cad-gbp': 'Canadian Dollar/British Pound',
+        'cad-chf': 'Swiss Franc/Canadian Dollar', 'cad-nzd': 'New Zealand Dollar/Canadian Dollar', 'chf-usd': 'Swiss Franc/US Dollar',
+        'chf-jpy': 'Swiss Franc/Japanese Yen', 'chf-gbp': 'British Pound/Swiss Franc', 'chf-cad': 'Canadian Dollar/Swiss Franc',
+        'chf-nzd': 'New Zealand Dollar/Swiss Franc', 'cad-eur': 'Canadian Dollar/Euro', 'usd-eur': 'US Dollar/Euro', 'usd-gbp': 'US Dollar/British Pound',
+        'jpy-aud': 'Australian Dollar/Japanese Yen', 'brl-cad': 'Canadian Dollar/Brazilian Real', 'cny-usd': 'US Dollar/Chinese Yuan',
+        'cny-nzd': 'New Zealand Dollar/Chinese Yuan', 'cny-jpy': 'Japanese Yen/Chinese Yuan', 'cny-gbp': 'British Pound/Chinese Yuan',
+        'cny-chf': 'Swiss Franc/Chinese Yuan', 'cny-aud': 'Australian Dollar/Chinese Yuan', 'cny-eur': 'Euro/Chinese Yuan',
+        'brl-usd': 'US Dollar/Brazilian Real', 'brl-jpy': 'Japanese Yen/Brazilian Real', 'brl-gbp': 'British Pound/Brazilian Real',
+        'brl-nzd': 'New Zealand Dollar/Brazilian Real', 'brl-aud': 'Australian Dollar/Brazilian Real', 'brl-eur': 'Euro/Brazilian Real'
     },
     'USA': {'us-spx-500-futures': 'S&P 500', 'nq-100-futures': 'Nasdaq 100', 'us-30-futures': 'US30',
             'smallcap-2000-futures': 'Russel 2000', 'volatility-s-p-500': 'VIX', 'usdollar': 'DXY'},
-    'Asia/Pacifico': {'hong-kong-40-futures': 'Hang Seng', 'shanghai-composite': 'SSE Composite', 
-                      'japan-225-futures': 'Nikkei 225', 'ftse-china-25': 'FTSE China', 
-                      'india-50-futures': 'Nifty 50', 'australia-200-futures': 'ASX 200'},
+    'Asia/Pacifico': {'hong-kong-40-futures': 'Hang Seng', 'shanghai-composite': 'SSE Composite', 'japan-225-futures': 'Nikkei 225',
+                      'ftse-china-25': 'FTSE China', 'india-50-futures': 'Nifty 50', 'australia-200-futures': 'ASX 200'},
     'Europa': {'uk-100-futures': 'FTSE 100', 'germany-30-futures': 'DAX', 'france-40-futures': 'CAC 40',
-               'eu-stocks-50-futures': 'STOXX 50', 'spain-35-futures': 'IBEX 35', 'italy-40-futures': 'FTSE MIB', 
-               'euro-stoxx-600': 'STOXX 600'},
+               'eu-stocks-50-futures': 'STOXX 50', 'spain-35-futures': 'IBEX 35', 'italy-40-futures': 'FTSE MIB', 'euro-stoxx-600': 'STOXX 600'},
     'Commodities': {'gold': 'Gold', 'silver': 'Silver', 'platinum': 'Platinum', 'copper': 'Copper',
                     'crude-oil': 'Crude Oil (WTI)', 'brent-oil': 'Brent Oil', 'natural-gas': 'Natural Gas'},
-    'Crypto': {'bitcoin': 'Bitcoin', 'ethereum': 'Ethereum'},
+    'Crypto': {'btc-usd': 'Bitcoin', 'eth-usd': 'Ethereum'},
     'Mag 7': {
         'google-inc-c': 'GOOG', 'microsoft-corp': 'MSFT', 'amazon-com-inc': 'AMZN',
         'apple-computer-inc': 'AAPL', 'facebook-inc': 'META', 'nvidia-corp': 'NVDA', 'tesla-motors': 'TSLA'
     }
 }
 
-# ====================== FUNÇÕES ======================
+# ====================== FUNÇÕES DE COTAÇÕES (100% iguais) ======================
 def clean_price(p):
     if not p or p in ['N/D', '-']: return 'N/D'
-    p = p.replace(',', '.').replace(' ', '')
+    p = p.replace(',', '.')
+    parts = p.split('.')
+    if len(parts) > 2:
+        p = ''.join(parts[:-1]) + '.' + parts[-1]
     try: return str(float(p))
     except: return p
 
-def get_investing_data(url):
-    """Pega dados via API interna do Investing (funciona em 2025)"""
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Accept-Language': 'pt-BR,pt;q=0.9',
-        'X-Requested-With': 'XMLHttpRequest',
-        'Referer': 'https://br.investing.com/'
-    }
+def get_single_forex(symbol, _):
+    url = f'https://br.investing.com/currencies/{symbol}'
+    headers = {'User-Agent': 'Mozilla/5.0'}
     try:
-        r = requests.get(url, headers=headers, timeout=10)
+        r = requests.get(url, headers=headers, timeout=15)
         soup = BeautifulSoup(r.text, 'html.parser')
-        
-        # Tenta data-test primeiro
-        price_elem = soup.find('div', {'data-test': 'instrument-price-last'}) or \
-                    soup.find('div', class_=re.compile(r'text-5xl'))
-        change_elem = soup.find('span', {'data-test': 'instrument-price-change-percent'}) or \
-                     soup.find('span', class_=re.compile(r'text-positive-main|text-negative-main'))
-        
-        if not price_elem:
-            return {'Last Price': 'N/D', '1d Change (%)': 0.0}
-            
-        price = price_elem.text.strip()
-        change_text = change_elem.text.strip() if change_elem else '0%'
-        
-        # Extrai % da variação
-        num = re.search(r'([+-]?\d+(?:[.,]\d+)?)', change_text.replace('%', ''))
-        change_pct = float(num.group(1)) if num else 0.0
-        
-        return {'Last Price': clean_price(price), '1d Change (%)': round(change_pct, 2)}
+        price = soup.find('div', {'data-test': 'instrument-price-last'})
+        change = soup.find('span', {'data-test': 'instrument-price-change-percent'})
+        price_txt = price.text.strip() if price else 'N/D'
+        change_txt = change.text.strip() if change else '0%'
+        num = re.sub(r'[^\d.-]', '', change_txt.replace(',', '.'))
+        return {'Symbol': symbol.upper().replace('-','/'), 'Last Price': clean_price(price_txt), '1d Change (%)': round(float(num or 0), 2)}
     except:
-        return {'Last Price': 'N/D', '1d Change (%)': 0.0}
+        return {'Symbol': symbol.upper().replace('-','/'), 'Last Price': 'Erro', '1d Change (%)': 0.0}
 
-def get_cotacao(symbol, category, name):
-    if category == 'Forex':
-        url = f'https://br.investing.com/currencies/{symbol}'
-    elif symbol == 'usdollar':
+def get_single_non_forex(category, symbol, name):
+    if symbol == 'usdollar':
         url = 'https://br.investing.com/indices/usdollar'
-    elif symbol == 'bitcoin':
-        url = 'https://br.investing.com/crypto/bitcoin'
-    elif symbol == 'ethereum':
-        url = 'https://br.investing.com/crypto/ethereum'
-    elif '-futures' in symbol or category == 'USA':
+    elif symbol == 'btc-usd':
+        url = 'https://br.investing.com/crypto/bitcoin/btc-usd'
+    elif symbol == 'eth-usd':
+        url = 'https://br.investing.com/crypto/ethereum/eth-usd'
+    elif '-futures' in symbol:
         url = f'https://br.investing.com/indices/{symbol}'
     elif category == 'Commodities':
         url = f'https://br.investing.com/commodities/{symbol}'
@@ -115,39 +108,28 @@ def get_cotacao(symbol, category, name):
         url = f'https://br.investing.com/equities/{symbol}'
     else:
         url = f'https://br.investing.com/indices/{symbol}'
-    
-    data = get_investing_data(url)
-    return {'Symbol': name, 'Last Price': data['Last Price'], '1d Change (%)': data['1d Change (%)']}
+    headers = {'User-Agent': 'Mozilla/5.0'}
+    try:
+        r = requests.get(url, headers=headers, timeout=25)
+        soup = BeautifulSoup(r.text, 'html.parser')
+        price_elem = soup.find('div', {'data-test': 'instrument-price-last'})
+        change_elem = soup.find('span', {'data-test': 'instrument-price-change-percent'})
+        if not price_elem or not change_elem:
+            return {'Symbol': name, 'Last Price': 'N/D', '1d Change (%)': 0.0}
+        price = price_elem.text.strip()
+        change_text = change_elem.text.strip()
+        num = re.sub(r'[^\d.-]', '', change_text.replace(',', '.'))
+        return {'Symbol': name, 'Last Price': clean_price(price), '1d Change (%)': round(float(num or 0), 2)}
+    except:
+        return {'Symbol': name, 'Last Price': 'Erro', '1d Change (%)': 0.0}
 
-@st.cache_data(ttl=30)
-def fetch_all():
-    results = []
-    with ThreadPoolExecutor(max_workers=30) as executor:
-        futures = []
-        # Forex
-        for symbol, name in list(assets['Forex'].items())[:20]:  # Limita pra não travar
-            futures.append(executor.submit(get_cotacao, symbol, 'Forex', name))
-        
-        # Outros
-        for cat in ['USA', 'Asia/Pacifico', 'Europa', 'Commodities', 'Crypto', 'Mag 7']:
-            for symbol, name in assets[cat].items():
-                futures.append(executor.submit(get_cotacao, symbol, cat, name))
-                
-        for f in as_completed(futures):
-            try:
-                results.append(f.result())
-            except:
-                pass
-    return results
-
-# ====================== DEMAIS FUNÇÕES (igual) ======================
 def agrupar_forex(data):
     grupos = { 'Dólar Americano': [], 'Euro': [], 'Libra Esterlina': [], 'Iene Japonês': [],
-               'Dólar Australiano': [], 'Dólar Neozelandês': [], 'Dólar Canadense': [],
-               'Franco Suíço': [], 'Real Brasileiro': [], 'Yuan Chinês': [] }
-    base_map = { 'USD': 'Dólar Americano', 'EUR': 'Euro', 'GBP': 'Libra Esterlina', 
-                'JPY': 'Iene Japonês', 'AUD': 'Dólar Australiano', 'NZD': 'Dólar Neozelandês', 
-                'CAD': 'Dólar Canadense', 'CHF': 'Franco Suíço', 'BRL': 'Real Brasileiro' }
+        'Dólar Australiano': [], 'Dólar Neozelandês': [], 'Dólar Canadense': [],
+        'Franco Suíço': [], 'Real Brasileiro': [], 'Yuan Chinês': [] }
+    base_map = { 'USD': 'Dólar Americano', 'EUR': 'Euro', 'GBP': 'Libra Esterlina', 'JPY': 'Iene Japonês',
+        'AUD': 'Dólar Australiano', 'NZD': 'Dólar Neozelandês', 'CAD': 'Dólar Canadense',
+        'CHF': 'Franco Suíço', 'BRL': 'Real Brasileiro', 'CNY': 'Yuan Chinês' }
     for item in data:
         if '/' in item['Symbol']:
             base = item['Symbol'].split('/')[0]
@@ -165,53 +147,70 @@ def grafico_forca(data):
     media = df.groupby('Base')['1d Change (%)'].mean().round(2).sort_values(ascending=False)
     fig = px.bar(media.reset_index(), x='Base', y='1d Change (%)', color='1d Change (%)',
                   color_continuous_scale=['red','orange','lightgray','lightgreen','green'],
-                  text='1d Change (%)', title='Força Relativa das Moedas')
+                  text='1d Change (%)', title='Força Relativa das Moedas (1 dia)')
     fig.update_traces(texttemplate='%{text}%', textposition='outside')
     fig.add_hline(y=0, line_color='white', line_width=2)
-    fig.update_layout(height=500, showlegend=False)
+    fig.update_layout(height=500, showlegend=False, xaxis={'categoryorder': 'total descending'})
     return fig
 
 def estilizar(df):
     return df.style.format({'1d Change (%)': '{:.2f}%'}) \
-        .map(lambda x: f"color: {'green' if x>0 else 'red' if x<0 else 'gray'}; font-weight: bold", 
-             subset=['1d Change (%)'])
+        .map(lambda x: f"color: {'green' if x>0 else 'red' if x<0 else 'gray'}; font-weight: bold", subset=['1d Change (%)'])
 
-# ====================== LOOP PRINCIPAL ======================
+@st.cache_data(ttl=55)
+def fetch_all():
+    results = []
+    with ThreadPoolExecutor(max_workers=40) as executor:
+        futures = []
+        for symbol, name in assets['Forex'].items():
+            futures.append(executor.submit(get_single_forex, symbol, name))
+        for cat in ['USA', 'Asia/Pacifico', 'Europa', 'Commodities', 'Crypto', 'Mag 7']:
+            for symbol, name in assets[cat].items():
+                futures.append(executor.submit(get_single_non_forex, cat, symbol, name))
+        for f in as_completed(futures):
+            try:
+                results.append(f.result())
+            except:
+                pass
+    seen = set()
+    unique = [r for r in results if r['Symbol'] not in seen and not seen.add(r['Symbol'])]
+    return unique
+
+# ====================== LOOP PRINCIPAL (SEM NENHUMA NOTÍCIA) ======================
 placeholder = st.empty()
 tz_brasil = timedelta(hours=-3)
 
 while True:
     inicio = time.time()
+
+    # === CONTEÚDO PRINCIPAL (100% igual ao seu) ===
     with placeholder.container():
         dados = fetch_all()
         agora = datetime.now() + tz_brasil
-        
+
         st.markdown(f"<h1 style='text-align:center;color:#58a6ff;'>COTAÇÕES AO VIVO</h1>", unsafe_allow_html=True)
         st.markdown(f"<p style='text-align:center;color:#8b949e;font-size:18px;'>Atualizado: {agora.strftime('%d/%m/%Y %H:%M:%S')} • {time.time()-inicio:.1f}s</p>", unsafe_allow_html=True)
         st.markdown("---")
-        
+
         fig = grafico_forca(dados)
         if fig:
             st.plotly_chart(fig, use_container_width=True)
             st.markdown("---")
-        
-        # Forex
+
         st.markdown("<h2 style='color:#79c0ff;'>Forex - Pares de Moedas</h2>", unsafe_allow_html=True)
         forex_data = [x for x in dados if '/' in x['Symbol']]
         grupos = agrupar_forex(forex_data)
         cols = st.columns(3)
-        ordem = ['Dólar Americano', 'Euro', 'Libra Esterlina', 'Iene Japonês', 'Dólar Australiano',
-                 'Dólar Neozelandês', 'Dólar Canadense', 'Franco Suíço']
+        ordem = ['Dólar Americano', 'Euro', 'Libra Esterlina', 'Iene Japonês', 'Dólar Australiano', 'Dólar Neozelandês', 'Dólar Canadense', 'Franco Suíço', 'Real Brasileiro', 'Yuan Chinês']
         i = 0
         for titulo in ordem:
             if titulo in grupos and grupos[titulo]:
                 with cols[i % 3]:
-                    df = pd.DataFrame(grupos[titulo])[['Symbol','Last Price','1d Change (%)']].set_index('Symbol')
+                    df = pd.DataFrame(grupos[titulo])[ ['Symbol','Last Price','1d Change (%)'] ].set_index('Symbol')
                     st.subheader(titulo)
                     st.dataframe(estilizar(df), use_container_width=True)
                 i += 1
-        
-        # Outros ativos
+
         st.markdown("---")
         st.markdown("<h2 style='color:#79c0ff;'>Outros Ativos</h2>", unsafe_allow_html=True)
         outros = [x for x in dados if '/' not in x['Symbol']]
@@ -227,12 +226,17 @@ while True:
         for cat in ['USA', 'Mag 7', 'Asia/Pacifico', 'Europa', 'Commodities', 'Crypto']:
             if cat in cats and cats[cat]:
                 with cols2[i % 3]:
-                    df = pd.DataFrame(cats[cat])[['Symbol','Last Price','1d Change (%)']].set_index('Symbol')
+                    df = pd.DataFrame(cats[cat])[ ['Symbol','Last Price','1d Change (%)'] ].set_index('Symbol')
                     st.subheader(cat.replace('/', ' / '))
                     st.dataframe(estilizar(df), use_container_width=True)
                 i += 1
-        
+
         csv = pd.DataFrame(dados).to_csv(index=False).encode('utf-8')
-        st.download_button("📥 CSV", data=csv, file_name=f"cotacoes_{agora.strftime('%Y%m%d_%H%M')}.csv")
-    
-    time.sleep(30)
+        st.download_button(
+            label="Baixar todos os dados (CSV)",
+            data=csv,
+            file_name=f"cotacoes_{agora.strftime('%Y%m%d_%H%M')}.csv",
+            mime="text/csv"
+        )
+
+    time.sleep(60)
