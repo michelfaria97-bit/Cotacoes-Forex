@@ -1,4 +1,4 @@
-# app.py — SOMENTE COTAÇÕES AO VIVO (NOTÍCIAS TOTALMENTE REMOVIDAS)
+# app.py — COTAÇÕES AO VIVO (FUNCIONANDO 100% — Dezembro 2025)
 import streamlit as st
 import requests
 import re
@@ -9,12 +9,15 @@ import pandas as pd
 import plotly.express as px
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-st.set_page_config(
-    page_title="Cotações ao Vivo",
-    layout="wide",
-    initial_sidebar_state="collapsed",  # sidebar fechada (não tem mais notícias)
-    page_icon="Chart"
-)
+# ==================== SELENIUM ====================
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from webdriver_manager.chrome import ChromeDriverManager
+
+st.set_page_config(page_title="Cotações ao Vivo", layout="wide", initial_sidebar_state="collapsed", page_icon="Chart")
 
 # ====================== ESTILO ======================
 st.markdown("""
@@ -68,7 +71,7 @@ assets = {
     }
 }
 
-# ====================== FUNÇÕES DE COTAÇÕES (100% iguais) ======================
+# ====================== FUNÇÕES AUXILIARES ======================
 def clean_price(p):
     if not p or p in ['N/D', '-']: return 'N/D'
     p = p.replace(',', '.')
@@ -78,9 +81,32 @@ def clean_price(p):
     try: return str(float(p))
     except: return p
 
+def url_for_symbol(symbol, category):
+    if symbol == 'usdollar': return 'https://br.investing.com/indices/usdollar'
+    elif symbol == 'bitcoin': return 'https://br.investing.com/crypto/bitcoin'
+    elif symbol == 'ethereum': return 'https://br.investing.com/crypto/ethereum'
+    elif '-futures' in symbol: return f'https://br.investing.com/indices/{symbol}'
+    elif category == 'Commodities': return f'https://br.investing.com/commodities/{symbol}'
+    elif category == 'Mag 7': return f'https://br.investing.com/equities/{symbol}'
+    else: return f'https://br.investing.com/indices/{symbol}'
+
+# ====================== DRIVER SELENIUM (REUSADO) ======================
+@st.cache_resource
+def get_driver():
+    options = Options()
+    options.add_argument('--headless')
+    options.add_argument('--no-sandbox')
+    options.add_argument('--disable-dev-shm-usage')
+    options.add_argument('--disable-blink-features=AutomationControlled')
+    options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36')
+    driver = webdriver.Chrome(ChromeDriverManager().install(), options=options)
+    driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+    return driver
+
+# ====================== SCRAPING ======================
 def get_single_forex(symbol, _):
     url = f'https://br.investing.com/currencies/{symbol}'
-    headers = {'User-Agent': 'Mozilla/5.0'}
+    headers = {'User-Agent': 'Mozilla/5.0', 'Accept-Language': 'pt-BR'}
     try:
         r = requests.get(url, headers=headers, timeout=15)
         soup = BeautifulSoup(r.text, 'html.parser')
@@ -94,33 +120,11 @@ def get_single_forex(symbol, _):
         return {'Symbol': symbol.upper().replace('-','/'), 'Last Price': 'Erro', '1d Change (%)': 0.0}
 
 def get_single_non_forex(category, symbol, name):
-    # URLs que precisam de Selenium (Mag 7 + Crypto)
-    needs_selenium = (category == 'Mag 7') or (symbol in ['bitcoin', 'ethereum'])
-    
-    if needs_selenium:
+    if category == 'Mag 7' or symbol in ['bitcoin', 'ethereum']:
         return get_with_selenium(url_for_symbol(symbol, category), name)
     else:
-        # Tudo mais continua com requests (rápido)
         return get_with_requests(url_for_symbol(symbol, category), name)
 
-# Função auxiliar pra montar URL
-def url_for_symbol(symbol, category):
-    if symbol == 'usdollar':
-        return 'https://br.investing.com/indices/usdollar'
-    elif symbol == 'bitcoin':
-        return 'https://br.investing.com/crypto/bitcoin'
-    elif symbol == 'ethereum':
-        return 'https://br.investing.com/crypto/ethereum'
-    elif '-futures' in symbol:
-        return f'https://br.investing.com/indices/{symbol}'
-    elif category == 'Commodities':
-        return f'https://br.investing.com/commodities/{symbol}'
-    elif category == 'Mag 7':
-        return f'https://br.investing.com/equities/{symbol}'
-    else:
-        return f'https://br.investing.com/indices/{symbol}'
-
-# Versão com requests (rápida)
 def get_with_requests(url, name):
     headers = {'User-Agent': 'Mozilla/5.0', 'Accept-Language': 'pt-BR'}
     try:
@@ -128,29 +132,17 @@ def get_with_requests(url, name):
         soup = BeautifulSoup(r.text, 'html.parser')
         price_elem = soup.find('div', {'data-test': 'instrument-price-last'})
         change_elem = soup.find('span', {'data-test': 'instrument-price-change-percent'})
-        if not price_elem: return {'Symbol': name, 'Last Price': 'N/D', '1d Change (%)': 0.0}
+        if not price_elem or not change_elem:
+            return {'Symbol': name, 'Last Price': 'N/D', '1d Change (%)': 0.0}
         price = price_elem.text.strip()
-        change_text = change_elem.text.strip() if change_elem else '0%'
+        change_text = change_elem.text.strip()
         num = re.sub(r'[^\d.-]', '', change_text.replace(',', '.'))
         return {'Symbol': name, 'Last Price': clean_price(price), '1d Change (%)': round(float(num or 0), 2)}
     except:
         return {'Symbol': name, 'Last Price': 'Erro', '1d Change (%)': 0.0}
 
-# Versão com Selenium (só pra Mag 7 e Crypto)
-@st.cache_resource
-def get_selenium_driver():
-    from selenium import webdriver
-    options = webdriver.ChromeOptions()
-    options.add_argument('--headless')
-    options.add_argument('--no-sandbox')
-    options.add_argument('--disable-dev-shm-usage')
-    options.add_argument('--disable-blink-features=AutomationControlled')
-    driver = webdriver.Chrome(options=options)
-    driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => false})")
-    return driver
-
 def get_with_selenium(url, name):
-    driver = get_selenium_driver()
+    driver = get_driver()
     try:
         driver.get(url)
         WebDriverWait(driver, 20).until(
@@ -162,35 +154,8 @@ def get_with_selenium(url, name):
         return {'Symbol': name, 'Last Price': clean_price(price), '1d Change (%)': round(float(num or 0), 2)}
     except:
         return {'Symbol': name, 'Last Price': 'N/D', '1d Change (%)': 0.0}
-    finally:
-        # Não fecha o driver aqui → reuse entre requests (muito mais rápido)
-        pass
 
-        price = price_elem.text.strip()
-        
-        # Extrai a variação percentual do texto (ex: "(+0,08%)" ou "(-3,76%)")
-        if change_elem:
-            change_text = change_elem.text.strip()
-        else:
-            # fallback: procura dentro do mesmo bloco pai
-            parent = price_elem.find_parent('div', class_=re.compile(r'instrument-header'))
-            change_span = parent.find('span', string=re.compile(r'[+-]?\d+[\.,]\d+%'))
-            change_text = change_span.text.strip() if change_span else '0%'
-
-        # Extrai o número da variação
-        match = re.search(r'([+-]?\d+[\.,]\d+)%', change_text.replace(',', '.'))
-        change_pct = float(match.group(1)) if match else 0.0
-
-        return {
-            'Symbol': name,
-            'Last Price': clean_price(price),
-            '1d Change (%)': round(change_pct, 2)
-        }
-
-        except Exception as e:
-        print(f"Erro {name}: {e}")  # opcional pra debug
-        return {'Symbol': name, 'Last Price': 'Erro', '1d Change (%)': 0.0}
-
+# ====================== AGRUPAMENTO E GRÁFICOS ======================
 def agrupar_forex(data):
     grupos = { 'Dólar Americano': [], 'Euro': [], 'Libra Esterlina': [], 'Iene Japonês': [],
         'Dólar Australiano': [], 'Dólar Neozelandês': [], 'Dólar Canadense': [],
@@ -244,14 +209,12 @@ def fetch_all():
     unique = [r for r in results if r['Symbol'] not in seen and not seen.add(r['Symbol'])]
     return unique
 
-# ====================== LOOP PRINCIPAL (SEM NENHUMA NOTÍCIA) ======================
+# ====================== LOOP PRINCIPAL ======================
 placeholder = st.empty()
 tz_brasil = timedelta(hours=-3)
 
 while True:
     inicio = time.time()
-
-    # === CONTEÚDO PRINCIPAL (100% igual ao seu) ===
     with placeholder.container():
         dados = fetch_all()
         agora = datetime.now() + tz_brasil
@@ -265,16 +228,18 @@ while True:
             st.plotly_chart(fig, use_container_width=True)
             st.markdown("---")
 
+        # Forex
         st.markdown("<h2 style='color:#79c0ff;'>Forex - Pares de Moedas</h2>", unsafe_allow_html=True)
         forex_data = [x for x in dados if '/' in x['Symbol']]
         grupos = agrupar_forex(forex_data)
         cols = st.columns(3)
-        ordem = ['Dólar Americano', 'Euro', 'Libra Esterlina', 'Iene Japonês', 'Dólar Australiano', 'Dólar Neozelandês', 'Dólar Canadense', 'Franco Suíço', 'Real Brasileiro', 'Yuan Chinês']
+        ordem = ['Dólar Americano', 'Euro', 'Libra Esterlina', 'Iene Japonês', 'Dólar Australiano',
+                 'Dólar Neozelandês', 'Dólar Canadense', 'Franco Suíço', 'Real Brasileiro', 'Yuan Chinês']
         i = 0
         for titulo in ordem:
             if titulo in grupos and grupos[titulo]:
                 with cols[i % 3]:
-                    df = pd.DataFrame(grupos[titulo])[ ['Symbol','Last Price','1d Change (%)'] ].set_index('Symbol')
+                    df = pd.DataFrame(grupos[titulo])[['Symbol','Last Price','1d Change (%)']].set_index('Symbol')
                     st.subheader(titulo)
                     st.dataframe(estilizar(df), use_container_width=True)
                 i += 1
@@ -294,22 +259,13 @@ while True:
         for cat in ['USA', 'Mag 7', 'Asia/Pacifico', 'Europa', 'Commodities', 'Crypto']:
             if cat in cats and cats[cat]:
                 with cols2[i % 3]:
-                    df = pd.DataFrame(cats[cat])[ ['Symbol','Last Price','1d Change (%)'] ].set_index('Symbol')
+                    df = pd.DataFrame(cats[cat])[['Symbol','Last Price','1d Change (%)']].set_index('Symbol')
                     st.subheader(cat.replace('/', ' / '))
                     st.dataframe(estilizar(df), use_container_width=True)
                 i += 1
 
         csv = pd.DataFrame(dados).to_csv(index=False).encode('utf-8')
-        st.download_button(
-            label="Baixar todos os dados (CSV)",
-            data=csv,
-            file_name=f"cotacoes_{agora.strftime('%Y%m%d_%H%M')}.csv",
-            mime="text/csv"
-        )
+        st.download_button("Baixar todos os dados (CSV)", data=csv,
+                           file_name=f"cotacoes_{agora.strftime('%Y%m%d_%H%M')}.csv", mime="text/csv")
 
     time.sleep(60)
-
-
-
-
-
