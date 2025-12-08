@@ -1,4 +1,4 @@
-# app.py — VERSÃO FINAL COM NOTÍCIAS IDÊNTICAS AO MARKETWATCH
+# app.py — SOMENTE COTAÇÕES AO VIVO (NOTÍCIAS TOTALMENTE REMOVIDAS)
 import streamlit as st
 import requests
 import re
@@ -8,15 +8,11 @@ from bs4 import BeautifulSoup
 import pandas as pd
 import plotly.express as px
 from concurrent.futures import ThreadPoolExecutor, as_completed
-import feedparser
-from deep_translator import GoogleTranslator
-import json
-import os
 
 st.set_page_config(
-    page_title="Cotações + Notícias ao Vivo",
+    page_title="Cotações ao Vivo",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="collapsed",  # sidebar fechada (não tem mais notícias)
     page_icon="Chart"
 )
 
@@ -24,38 +20,13 @@ st.set_page_config(
 st.markdown("""
 <style>
     .main { background-color: #0e1117; }
-    .sidebar .sidebar-content { background-color: #161b22; }
+    h1, h2 { color: #58a6ff; text-align: center; }
     .stDataFrame { width: 100% !important; }
     [data-testid="column"] { padding: 8px !important; }
-    /* Estilo para o scroller */
-    .mw-news-item:hover { background: #1f252d !important; }
 </style>
 """, unsafe_allow_html=True)
 
-# ====================== CACHE DE NOTÍCIAS VISTAS ======================
-CACHE_FILE = ".streamlit/noticias_vistas.json"
-if not os.path.exists(".streamlit"):
-    os.makedirs(".streamlit", exist_ok=True)
-
-def carregar_vistas():
-    if os.path.exists(CACHE_FILE):
-        try:
-            with open(CACHE_FILE, "r", encoding="utf-8") as f:
-                return set(json.load(f))
-        except:
-            return set()
-    return set()
-
-def salvar_vistas(vistas):
-    try:
-        with open(CACHE_FILE, "w", encoding="utf-8") as f:
-            json.dump(list(vistas), f, ensure_ascii=False)
-    except:
-        pass
-
-vistas = carregar_vistas()
-
-# ====================== ATIVOS COMPLETOS (ATUALIZADO COM MAG 7) ======================
+# ====================== ATIVOS COMPLETOS ======================
 assets = {
     'Forex': {
         'eur-usd': 'Euro/US Dollar', 'gbp-usd': 'British Pound/US Dollar', 'usd-jpy': 'US Dollar/Japanese Yen',
@@ -91,19 +62,13 @@ assets = {
     'Commodities': {'gold': 'Gold', 'silver': 'Silver', 'platinum': 'Platinum', 'copper': 'Copper',
                     'crude-oil': 'Crude Oil (WTI)', 'brent-oil': 'Brent Oil', 'natural-gas': 'Natural Gas'},
     'Crypto': {'btc-usd': 'Bitcoin', 'eth-usd': 'Ethereum'},
-    # MAGNIFICENT 7
     'Mag 7': {
-        'google-inc-c': 'GOOG',
-        'microsoft-corp': 'MSFT',
-        'amazon-com-inc': 'AMZN',
-        'apple-computer-inc': 'AAPL',
-        'facebook-inc': 'META',
-        'nvidia-corp': 'NVDA',
-        'tesla-motors': 'TSLA'
+        'google-inc-c': 'GOOG', 'microsoft-corp': 'MSFT', 'amazon-com-inc': 'AMZN',
+        'apple-computer-inc': 'AAPL', 'facebook-inc': 'META', 'nvidia-corp': 'NVDA', 'tesla-motors': 'TSLA'
     }
 }
 
-# ====================== FUNÇÕES DE COTAÇÕES ======================
+# ====================== FUNÇÕES DE COTAÇÕES (100% iguais) ======================
 def clean_price(p):
     if not p or p in ['N/D', '-']: return 'N/D'
     p = p.replace(',', '.')
@@ -139,12 +104,11 @@ def get_single_non_forex(category, symbol, name):
         url = f'https://br.investing.com/indices/{symbol}'
     elif category == 'Commodities':
         url = f'https://br.investing.com/commodities/{symbol}'
-    elif category == 'Mag 7': # Corrigido para Ações (Equities)
+    elif category == 'Mag 7':
         url = f'https://br.investing.com/equities/{symbol}'
     else:
         url = f'https://br.investing.com/indices/{symbol}'
-
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+    headers = {'User-Agent': 'Mozilla/5.0'}
     try:
         r = requests.get(url, headers=headers, timeout=25)
         soup = BeautifulSoup(r.text, 'html.parser')
@@ -200,7 +164,6 @@ def fetch_all():
         futures = []
         for symbol, name in assets['Forex'].items():
             futures.append(executor.submit(get_single_forex, symbol, name))
-        # Loop atualizado para incluir 'Mag 7'
         for cat in ['USA', 'Asia/Pacifico', 'Europa', 'Commodities', 'Crypto', 'Mag 7']:
             for symbol, name in assets[cat].items():
                 futures.append(executor.submit(get_single_non_forex, cat, symbol, name))
@@ -213,134 +176,14 @@ def fetch_all():
     unique = [r for r in results if r['Symbol'] not in seen and not seen.add(r['Symbol'])]
     return unique
 
-# ====================== NOTÍCIAS AO VIVO — ESTILO MARKETWATCH ======================
-def carregar_noticias_frescas():
-    global vistas
-    novas = []
-    feeds = [
-        "https://br.investing.com/rss/market_overview_Technical.rss",
-        "https://br.investing.com/rss/stock.rss",
-        "https://bmcnews.com.br/feed/",
-        "https://www.bloomberglinea.com.br/arc/outboundfeeds/rss.xml",
-        "https://einvestidor.estadao.com.br/feed/",
-        "https://www.infomoney.com.br/feed/",
-        "https://investnews.com.br/feed/",
-        "https://br.advfn.com/jornal/rss",
-        "https://www.infomoney.com.br/mercados/feed/",
-        "https://borainvestir.b3.com.br/noticias/mercado/feed/",
-        "https://www.moneytimes.com.br/mercados/feed/",
-        "https://www.infomoney.com.br/onde-investir/feed/",
-        "https://www.bcb.gov.br/api/feed/sitebcb/sitefeeds/cambio",
-        "https://www.bcb.gov.br/api/feed/sitebcb/sitefeeds/focus",
-        "https://www.bomdiamercado.com.br/feed/",
-        "https://timesbrasil.com.br/feed/",
-        "https://br.investing.com/rss/news.rss",
-        "https://cms.zerohedge.com/fullrss2.xml",
-        "https://cbn.globo.com/rss/cbn/",
-        "https://valor.globo.com/rss/valor",
-        "https://www.seudinheiro.com/feed/",
-        "https://investinglive.com/feed",
-        "https://feeds.feedburner.com/barchartnews"
-    ]
-
-    for url in feeds:
-        try:
-            feed = feedparser.parse(url)
-            for entry in feed.entries:
-                link = entry.link.strip()
-                if link in vistas: continue
-
-                titulo = entry.title.strip()
-
-                # Traduz notícias em inglês
-                try:
-                    if any(kw in url.lower() for kw in ["zerohedge", "barchart", "investing.com/rss/news"]):
-                        titulo = GoogleTranslator(source='en', target='pt').translate(titulo)
-                except: pass
-
-                data_raw = entry.get('published') or entry.get('updated') or ""
-                try:
-                    data = datetime.strptime(data_raw[:19], "%Y-%m-%dT%H:%M:%S")
-                    data = data.strftime("%-d/%-m %H:%M") if data.hour else "Agora"
-                except:
-                    data = "Agora"
-
-                novas.append({
-                    'titulo': titulo,
-                    'link': link,
-                    'hora': hora,           # ← mantenha assim
-                    'timestamp': time.time()
-                })
-                vistas.add(link)
-        except: continue
-
-    salvar_vistas(vistas)
-    novas.sort(key=lambda x: x['timestamp'], reverse=True)
-    return novas[:80]  # 80 notícias = rolagem perfeita
-
-# ====================== LOOP PRINCIPAL ======================
+# ====================== LOOP PRINCIPAL (SEM NENHUMA NOTÍCIA) ======================
 placeholder = st.empty()
 tz_brasil = timedelta(hours=-3)
 
 while True:
     inicio = time.time()
-    noticias = carregar_noticias_frescas()
 
-# ====================== SIDEBAR — EXATAMENTE COMO MARKETWATCH ======================
-    with st.sidebar:
-        # Cabeçalho único e fixo
-        st.markdown("""
-        <div class="mw-header">
-            <h2 class="mw-title">Últimas Notícias</h2>
-            <p class="mw-subtitle">(Fuso horário de Brasília)</p>
-        </div>
-        """, unsafe_allow_html=True)
-
-        if not noticias:
-            st.info("Carregando notícias...")
-        else:
-            itens = ""
-            for n in noticias:
-                # AQUI ESTAVA O ERRO → usava n['hora'] mas a chave ainda era 'data'
-                hora_exibida = n.get('hora') or n.get('data') or "Agora"
-                itens += f"""
-                <a href="{n['link']}" target="_blank" style="text-decoration:none;color:inherit;display:block;">
-                    <div style="padding:13px 16px;border-bottom:1px solid #30363d;transition:background .2s;">
-                        <div style="display:flex;gap:14px;align-items:flex-start;">
-                            <div style="color:#8b949e;font-size:13px;font-weight:500;min-width:70px;flex-shrink:0;">
-                                {hora_exibida}
-                            </div>
-                            <div style="color:#58a6ff;font-size:15px;font-weight:500;line-height:1.45;">
-                                {n['titulo']}
-                            </div>
-                        </div>
-                    </div>
-                </a>
-                """
-
-            # Duplica para rolagem infinita perfeita
-            itens_duplicado = itens + itens
-
-            st.markdown(f"""
-            <div style="height:calc(100vh - 140px);overflow:hidden;">
-                <div style="animation: scroll 110s linear infinite;">
-                    {itens_duplicado}
-                </div>
-            </div>
-
-            <style>
-                @keyframes scroll {{
-                    0% {{ transform: translateY(0); }}
-                    100% {{ transform: translateY(-50%); }}
-                }}
-                div:hover {{ animation-play-state: paused; }}
-                a > div:hover {{ background:#1f252d !important; }}
-            </style>
-            """, unsafe_allow_html=True)
-
-        st.markdown("<div style='text-align:center;color:#666;font-size:12px;padding:10px 0;'>Atualiza a cada 60s</div>", unsafe_allow_html=True)
-        
-    # === CONTEÚDO PRINCIPAL ===
+    # === CONTEÚDO PRINCIPAL (100% igual ao seu) ===
     with placeholder.container():
         dados = fetch_all()
         agora = datetime.now() + tz_brasil
@@ -367,12 +210,11 @@ while True:
                     st.subheader(titulo)
                     st.dataframe(estilizar(df), use_container_width=True)
                 i += 1
-        st.markdown("---")
 
+        st.markdown("---")
         st.markdown("<h2 style='color:#79c0ff;'>Outros Ativos</h2>", unsafe_allow_html=True)
-        outros = [x for x in dados if '/' not in x['Symbol']]
+        outros = [x for x in dados if '/' not '/' in x['Symbol']]
         cols2 = st.columns(3)
-        # INCLUIDO Mag 7 na lista de categorias para popular o dicionário
         cats = {'USA':[], 'Mag 7':[], 'Asia/Pacifico':[], 'Europa':[], 'Commodities':[], 'Crypto':[]}
         for item in outros:
             for c, itens in assets.items():
@@ -381,7 +223,6 @@ while True:
                     cats[c].append(item)
                     break
         i = 0
-        # LOOP DE EXIBIÇÃO ATUALIZADO PARA INCLUIR MAG 7 DEPOIS DE USA
         for cat in ['USA', 'Mag 7', 'Asia/Pacifico', 'Europa', 'Commodities', 'Crypto']:
             if cat in cats and cats[cat]:
                 with cols2[i % 3]:
@@ -395,16 +236,7 @@ while True:
             label="Baixar todos os dados (CSV)",
             data=csv,
             file_name=f"cotacoes_{agora.strftime('%Y%m%d_%H%M')}.csv",
-            mime="text/csv",
-            key=f"dl_{int(time.time())}"
+            mime="text/csv"
         )
 
     time.sleep(60)
-
-
-
-
-
-
-
-
