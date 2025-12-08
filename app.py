@@ -108,19 +108,54 @@ def get_single_non_forex(category, symbol, name):
         url = f'https://br.investing.com/equities/{symbol}'
     else:
         url = f'https://br.investing.com/indices/{symbol}'
-    headers = {'User-Agent': 'Mozilla/5.0'}
+
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
+        'X-Requested-With': 'XMLHttpRequest'
+    }
+
     try:
-        r = requests.get(url, headers=headers, timeout=25)
+        r = requests.get(url, headers=headers, timeout=20)
+        r.raise_for_status()
         soup = BeautifulSoup(r.text, 'html.parser')
+
+        # PRIMEIRA TENTATIVA: com data-test (ainda funciona em índices, forex, etc)
         price_elem = soup.find('div', {'data-test': 'instrument-price-last'})
         change_elem = soup.find('span', {'data-test': 'instrument-price-change-percent'})
-        if not price_elem or not change_elem:
+
+        # SEGUNDA TENTATIVA: novo padrão 2025 (ações e crypto)
+        if not price_elem:
+            price_elem = soup.find('div', class_=re.compile(r'text-5xl/9|text-[42px]'))
+        if not change_elem:
+            change_elem = soup.find('span', class_=re.compile(r'text-positive-main|text-negative-main'))
+
+        if not price_elem:
             return {'Symbol': name, 'Last Price': 'N/D', '1d Change (%)': 0.0}
+
         price = price_elem.text.strip()
-        change_text = change_elem.text.strip()
-        num = re.sub(r'[^\d.-]', '', change_text.replace(',', '.'))
-        return {'Symbol': name, 'Last Price': clean_price(price), '1d Change (%)': round(float(num or 0), 2)}
-    except:
+        
+        # Extrai a variação percentual do texto (ex: "(+0,08%)" ou "(-3,76%)")
+        if change_elem:
+            change_text = change_elem.text.strip()
+        else:
+            # fallback: procura dentro do mesmo bloco pai
+            parent = price_elem.find_parent('div', class_=re.compile(r'instrument-header'))
+            change_span = parent.find('span', string=re.compile(r'[+-]?\d+[\.,]\d+%'))
+            change_text = change_span.text.strip() if change_span else '0%'
+
+        # Extrai o número da variação
+        match = re.search(r'([+-]?\d+[\.,]\d+)%', change_text.replace(',', '.'))
+        change_pct = float(match.group(1)) if match else 0.0
+
+        return {
+            'Symbol': name,
+            'Last Price': clean_price(price),
+            '1d Change (%)': round(change_pct, 2)
+        }
+
+    except Exception as e:
+        print(f"Erro {name}: {e}")  # opcional pra debug
         return {'Symbol': name, 'Last Price': 'Erro', '1d Change (%)': 0.0}
 
 def agrupar_forex(data):
@@ -240,5 +275,6 @@ while True:
         )
 
     time.sleep(60)
+
 
 
