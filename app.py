@@ -268,7 +268,7 @@ def carregar_noticias_frescas():
                 novas.append({
                     'titulo': titulo,
                     'link': link,
-                    'data': data,
+                    'hora': hora,           # ← mantenha assim
                     'timestamp': time.time()
                 })
                 vistas.add(link)
@@ -301,12 +301,14 @@ while True:
         else:
             itens = ""
             for n in noticias:
+                # AQUI ESTAVA O ERRO → usava n['hora'] mas a chave ainda era 'data'
+                hora_exibida = n.get('hora') or n.get('data') or "Agora"
                 itens += f"""
-                <a href="{n['link']}" target="_blank" style="text-decoration:none;color:inherit;display:block;" class="mw-item">
-                    <div style="padding:13px 16px;border-bottom:1px solid #30363d;">
+                <a href="{n['link']}" target="_blank" style="text-decoration:none;color:inherit;display:block;">
+                    <div style="padding:13px 16px;border-bottom:1px solid #30363d;transition:background .2s;">
                         <div style="display:flex;gap:14px;align-items:flex-start;">
                             <div style="color:#8b949e;font-size:13px;font-weight:500;min-width:70px;flex-shrink:0;">
-                                {n['hora']}
+                                {hora_exibida}
                             </div>
                             <div style="color:#58a6ff;font-size:15px;font-weight:500;line-height:1.45;">
                                 {n['titulo']}
@@ -316,24 +318,23 @@ while True:
                 </a>
                 """
 
-            # Duplica para rolagem perfeita
+            # Duplica para rolagem infinita perfeita
             itens_duplicado = itens + itens
 
             st.markdown(f"""
-            <div style="height:calc(100vh - 140px);overflow:hidden;position:relative;">
-                <div style="animation: scroll 100s linear infinite;">
+            <div style="height:calc(100vh - 140px);overflow:hidden;">
+                <div style="animation: scroll 110s linear infinite;">
                     {itens_duplicado}
-                    <div style="height:100vh;"></div>
                 </div>
             </div>
 
             <style>
                 @keyframes scroll {{
-                    0%   {{ transform: translateY(0); }}
+                    0% {{ transform: translateY(0); }}
                     100% {{ transform: translateY(-50%); }}
                 }}
-                .mw-item:hover {{ background:#1a1f2e !important; }}
-                a {{ display: block; }}
+                div:hover {{ animation-play-state: paused; }}
+                a > div:hover {{ background:#1f252d !important; }}
             </style>
             """, unsafe_allow_html=True)
 
@@ -399,6 +400,7 @@ while True:
         )
 
     time.sleep(60)
+
 
 
 
