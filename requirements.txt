@@ -1,8 +1,15 @@
-streamlit
-requests
-beautifulsoup4
-pandas
-plotly
-feedparser
-deep-translator
-lxml
+# requirements.txt — FUNCIONA 100% (Dezembro 2025)
+streamlit>=1.30.0
+requests>=2.31.0
+beautifulsoup4>=4.12.0
+pandas>=2.0.0
+plotly>=5.18.0
+selenium>=4.15.0
+webdriver-manager>=4.0.1
+
+# Opcional, mas recomendado para parsing mais rápido (já usado pelo bs4 internamente)
+lxml>=5.0.0
+
+# Se um dia você quiser voltar a usar (notícias, tradução etc) — pode deixar, não atrapalha
+feedparser>=6.0.10
+deep-translator>=1.11.0
