@@ -1,4 +1,4 @@
-# app.py — VERSÃO FINAL: LIMPA DE ERROS DE SINTAXE E COM TODAS AS FUNÇÕES SOLICITADAS
+# app.py — VERSÃO FINAL COM NOTÍCIAS IDÊNTICAS AO MARKETWATCH
 import streamlit as st
 import requests
 import re
@@ -25,21 +25,14 @@ st.markdown("""
 <style>
     .main { background-color: #0e1117; }
     .sidebar .sidebar-content { background-color: #161b22; }
-    .news-item {
-        padding: 14px;
-        border-bottom: 1px solid #30363d;
-        transition: all 0.2s;
-    }
-    .news-item:hover { background:#21262d; padding-left:18px; }
-    .news-title a { color:#58a6ff; text-decoration:none; font-weight:600; font-size:15px; line-height:1.4; }
-    .news-title a:hover { color:#79c0ff; text-decoration:underline; }
-    .news-meta { font-size:12px; color:#8b949e; margin-top:6px; }
     .stDataFrame { width: 100% !important; }
     [data-testid="column"] { padding: 8px !important; }
+    /* Estilo para o scroller */
+    .mw-news-item:hover { background: #1f252d !important; }
 </style>
 """, unsafe_allow_html=True)
 
-# ====================== CACHE DE NOTÍCIAS ======================
+# ====================== CACHE DE NOTÍCIAS VISTAS ======================
 CACHE_FILE = ".streamlit/noticias_vistas.json"
 if not os.path.exists(".streamlit"):
     os.makedirs(".streamlit", exist_ok=True)
@@ -220,72 +213,70 @@ def fetch_all():
     unique = [r for r in results if r['Symbol'] not in seen and not seen.add(r['Symbol'])]
     return unique
 
-# ====================== NOTÍCIAS — FORÇANDO ORDEM CORRETA (TUDO) ======================
+# ====================== NOTÍCIAS AO VIVO — ESTILO MARKETWATCH ======================
 def carregar_noticias_frescas():
     global vistas
     novas = []
     feeds = [
-    "https://br.investing.com/rss/market_overview_Technical.rss",
-    "https://br.investing.com/rss/stock.rss",
-    "https://bmcnews.com.br/feed/",
-    "https://www.bloomberglinea.com.br/arc/outboundfeeds/rss.xml",
-    "https://einvestidor.estadao.com.br/feed/",
-    "https://www.infomoney.com.br/feed/",
-    "https://investnews.com.br/feed/",
-    "https://br.advfn.com/jornal/rss",
-    "https://www.infomoney.com.br/mercados/feed/",
-    "https://borainvestir.b3.com.br/noticias/mercado/feed/",
-    "https://www.moneytimes.com.br/mercados/feed/",
-    "https://www.infomoney.com.br/onde-investir/feed/",
-    "https://www.bcb.gov.br/api/feed/sitebcb/sitefeeds/cambio",
-    "https://www.bcb.gov.br/api/feed/sitebcb/sitefeeds/focus",
-    "https://www.bomdiamercado.com.br/feed/",
-    "https://timesbrasil.com.br/feed/",
-    "https://br.investing.com/rss/news.rss",
-    "https://cms.zerohedge.com/fullrss2.xml",
-    "https://cbn.globo.com/rss/cbn/",
-    "https://valor.globo.com/rss/valor",
-    "http://pox.globo.com/rss/valor",
-    "https://pox.globo.com/rss/valorinveste/",
-    "https://www.seudinheiro.com/feed/",
-    "https://www.barchart.com/news/authors/rss",
-    "https://investinglive.com/feed",
-    "https://feeds.feedburner.com/barchartnews"
+        "https://br.investing.com/rss/market_overview_Technical.rss",
+        "https://br.investing.com/rss/stock.rss",
+        "https://bmcnews.com.br/feed/",
+        "https://www.bloomberglinea.com.br/arc/outboundfeeds/rss.xml",
+        "https://einvestidor.estadao.com.br/feed/",
+        "https://www.infomoney.com.br/feed/",
+        "https://investnews.com.br/feed/",
+        "https://br.advfn.com/jornal/rss",
+        "https://www.infomoney.com.br/mercados/feed/",
+        "https://borainvestir.b3.com.br/noticias/mercado/feed/",
+        "https://www.moneytimes.com.br/mercados/feed/",
+        "https://www.infomoney.com.br/onde-investir/feed/",
+        "https://www.bcb.gov.br/api/feed/sitebcb/sitefeeds/cambio",
+        "https://www.bcb.gov.br/api/feed/sitebcb/sitefeeds/focus",
+        "https://www.bomdiamercado.com.br/feed/",
+        "https://timesbrasil.com.br/feed/",
+        "https://br.investing.com/rss/news.rss",
+        "https://cms.zerohedge.com/fullrss2.xml",
+        "https://cbn.globo.com/rss/cbn/",
+        "https://valor.globo.com/rss/valor",
+        "https://www.seudinheiro.com/feed/",
+        "https://investinglive.com/feed",
+        "https://feeds.feedburner.com/barchartnews"
     ]
+
     for url in feeds:
         try:
             feed = feedparser.parse(url)
-            for entry in feed.entries: # Pega todas as notícias do feed (sem limite [:12])
+            for entry in feed.entries:
                 link = entry.link.strip()
                 if link in vistas: continue
+
                 titulo = entry.title.strip()
-                
-                # Lógica de Tradução Melhorada:
+
+                # Traduz notícias em inglês
                 try:
-                    if any(kw in url for kw in ["investing.com/rss/news.rss", "zerohedge", "barchart"]) or \
-                        any(kw in titulo.lower() for kw in ["fed", "cpi", "powell", "ecb", "rate", "inflation", "stock", "oil", "market"]):
+                    if any(kw in url.lower() for kw in ["zerohedge", "barchart", "investing.com/rss/news"]):
                         titulo = GoogleTranslator(source='en', target='pt').translate(titulo)
                 except: pass
-                
+
                 data_raw = entry.get('published') or entry.get('updated') or ""
                 try:
-                    data = datetime.strptime(data_raw[:19], "%Y-%m-%dT%H:%M:%S").strftime("%d/%m %H:%M")
+                    data = datetime.strptime(data_raw[:19], "%Y-%m-%dT%H:%M:%S")
+                    data = data.strftime("%-d/%-m %H:%M") if data.hour else "Agora"
                 except:
                     data = "Agora"
-                fonte = feed.feed.get('title', 'Fonte').split('-')[0].strip()
+
                 novas.append({
                     'titulo': titulo,
                     'link': link,
-                    'fonte': fonte,
                     'data': data,
-                    'timestamp': time.time()  # GARANTE ORDEM CORRETA
+                    'timestamp': time.time()
                 })
                 vistas.add(link)
         except: continue
+
     salvar_vistas(vistas)
-    # ORDENA SEMPRE POR TIMESTAMP DESCENDENTE E LIMITA A 100 NA SIDEBAR
     novas.sort(key=lambda x: x['timestamp'], reverse=True)
-    return novas[:100]
+    return novas[:80]  # 80 notícias = rolagem perfeita
 
 # ====================== LOOP PRINCIPAL ======================
 placeholder = st.empty()
@@ -293,68 +284,61 @@ tz_brasil = timedelta(hours=-3)
 
 while True:
     inicio = time.time()
+    noticias = carregar_noticias_frescas()
 
-    # === SIDEBAR: NOTÍCIAS MAIS NOVAS NO TOPO ===
-    noticias = carregar_noticias_frescas()  # função sem cache para forçar atualização
-    # === SIDEBAR: NOTÍCIAS AO VIVO – ESTILO MARKETWATCH 100% FUNCIONAL ===
+    # ====================== SIDEBAR — NOTÍCIAS ESTILO MARKETWATCH ======================
     with st.sidebar:
         st.markdown("""
-        <h2 style="color:#58a6ff; text-align:center; margin:20px 0 8px 0; font-size:18px;">
-            Notícias ao Vivo
-        </h2>
-        <p style="text-align:center; color:#8b949e; font-size:13px; margin-bottom:25px;">
-            (Horário de Brasília)
-        </p>
+        <div style="padding: 16px 16px 8px 16px; background: #0e1117; position: sticky; top: 0; z-index: 100;">
+            <h2 style="color: #58a6ff; text-align: center; margin: 0; font-size: 18px; font-weight: 600;">
+                Últimas Notícias
+            </h2>
+            <p style="color: #8b949e; text-align: center; margin: 4px 0 0 0; font-size: 13px;">
+                (Fuso horário de Brasília)
+            </p>
+        </div>
         """, unsafe_allow_html=True)
 
         if not noticias:
             st.info("Carregando notícias...")
         else:
-            news_list = ""
-            for n in noticias[:60]:  # até 60 notícias rodando – fica perfeito
-                news_list += f"""
-                <a href="{n['link']}" target="_blank" style="text-decoration:none; color:inherit; display:block;">
-                    <div style="padding:13px 16px; border-bottom:1px solid #30363d; transition:background 0.25s;">
-                        <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px;">
-                            <span style="font-size:12px; color:#8b949e; min-width:68px; flex-shrink:0;">{n['data']}</span>
-                            <span style="font-size:14.8px; color:#58a6ff; font-weight:500; line-height:1.45;">
+            news_html = ""
+            for n in noticias:
+                hora = n['data'] if n['data'] != "Agora" else "Agora"
+                news_html += f"""
+                <a href="{n['link']}" target="_blank" style="text-decoration:none; color:inherit; display:block;" class="mw-news-item">
+                    <div style="padding:13px 16px; border-bottom:1px solid #30363d; transition:background .2s;">
+                        <div style="display:flex; align-items:flex-start; gap:14px;">
+                            <div style="color:#8b949e; font-size:12.5px; font-weight:500; min-width:68px; flex-shrink:0;">
+                                {hora}
+                            </div>
+                            <div style="color:#58a6ff; font-size:15px; font-weight:500; line-height:1.45;">
                                 {n['titulo']}
-                            </span>
+                            </div>
                         </div>
                     </div>
                 </a>
                 """
 
-            # O truque: duplicamos o bloco para o loop ficar perfeito sem “corte”
-            full_news = news_list + news_list
+            # Duplica para rolagem infinita perfeita
+            full_news = news_html + news_html
 
             st.markdown(f"""
-            <div style="height: calc(100vh - 180px); overflow:hidden; border-radius:8px; background:#0e1117;">
-                <div class="auto-scroll">
+            <div style="height: calc(100vh - 130px); overflow: hidden; background:#0e1117;">
+                <div style="animation: scroll 120s linear infinite; padding-top: 100vh;" onmouseover="this.style.animationPlayState='paused'" onmouseout="this.style.animationPlayState='running'">
                     {full_news}
                 </div>
             </div>
 
             <style>
-                .auto-scroll {{
-                    animation: scrollNews 120s linear infinite;
-                }}
-                @keyframes scrollNews {{
+                @keyframes scroll {{
                     0%   {{ transform: translateY(0); }}
                     100% {{ transform: translateY(-50%); }}
-                }}
-                .auto-scroll:hover {{
-                    animation-play-state: paused;
-                }}
-                a:hover div {{
-                    background: #21262d !important;
                 }}
             </style>
             """, unsafe_allow_html=True)
 
-        st.markdown("---")
-        st.caption("Atualiza a cada 60 segundos • Rolagem automática")
-
+        st.markdown("<div style='text-align:center; color:#666; font-size:12px; padding:8px;'>Atualiza a cada 60s</div>", unsafe_allow_html=True)
     # === CONTEÚDO PRINCIPAL ===
     with placeholder.container():
         dados = fetch_all()
@@ -415,6 +399,7 @@ while True:
         )
 
     time.sleep(60)
+
 
 
 
