@@ -213,7 +213,7 @@ while True:
 
         st.markdown("---")
         st.markdown("<h2 style='color:#79c0ff;'>Outros Ativos</h2>", unsafe_allow_html=True)
-        outros = [x for x in dados if '/' not '/' in x['Symbol']]
+        outros = [x for x in dados if '/' not in x['Symbol']]
         cols2 = st.columns(3)
         cats = {'USA':[], 'Mag 7':[], 'Asia/Pacifico':[], 'Europa':[], 'Commodities':[], 'Crypto':[]}
         for item in outros:
@@ -240,3 +240,4 @@ while True:
         )
 
     time.sleep(60)
+
