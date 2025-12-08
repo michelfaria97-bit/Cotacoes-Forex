@@ -1,4 +1,4 @@
-# app.py — COTAÇÕES + NOTÍCIAS AO VIVO COM SCROLL INFINITO (IGUAL MARKETWATCH)
+# app.py — COTAÇÕES + NOTÍCIAS AO VIVO (VERSÃO FINAL COM TODAS AS CORREÇÕES)
 import streamlit as st
 import requests
 import re
@@ -20,7 +20,7 @@ st.set_page_config(
     page_icon="Chart"
 )
 
-# ====================== ESTILO + SCROLL SUAVE ======================
+# ====================== CSS + SCROLL SUAVE ======================
 st.markdown("""
 <style>
     .main { background-color: #0e1117; }
@@ -43,28 +43,11 @@ st.markdown("""
         border-bottom: 1px solid #30363d;
         transition: all 0.2s;
     }
-    .news-item:hover { 
-        background:#21262d; 
-        padding-left:18px; 
-    }
-    .news-title a { 
-        color:#58a6ff; 
-        text-decoration:none; 
-        font-weight:600; 
-        font-size:15px; 
-        line-height:1.45; 
-        display:block;
-    }
-    .news-title a:hover { 
-        color:#79c0ff; 
-        text-decoration:underline; 
-    }
-    .news-meta { 
-        font-size:12px; 
-        color:#8b949e; 
-        margin-top:6px; 
-    }
-    .news-duplicate { opacity: 0; pointer-events: none; } /* para loop infinito */
+    .news-item:hover { background:#21262d; padding-left:18px; }
+    .news-title a { color:#58a6ff; text-decoration:none; font-weight:600; font-size:15px; line-height:1.45; display:block; }
+    .news-title a:hover { color:#79c0ff; text-decoration:underline; }
+    .news-meta { font-size:12px; color:#8b949e; margin-top:6px; }
+    .news-duplicate { opacity: 0; pointer-events: none; }
     .footer-text { text-align:center; color:#666; font-size:0.8em; margin-top:15px; }
 </style>
 """, unsafe_allow_html=True)
@@ -188,12 +171,16 @@ def get_single_non_forex(category, symbol, name):
         return {'Symbol': name, 'Last Price': 'Erro', '1d Change (%)': 0.0}
 
 def agrupar_forex(data):
-    grupos = { 'Dólar Americano': [], 'Euro': [], 'Libra Esterlina': [], 'Iene Japonês': [],
+    grupos = { 
+        'Dólar Americano': [], 'Euro': [], 'Libra Esterlina': [], 'Iene Japonês': [],
         'Dólar Australiano': [], 'Dólar Neozelandês': [], 'Dólar Canadense': [],
-        'Franco Suíço': [], 'Real Brasileiro': [], 'Yuan Chinês': [] }
-    base_map = { 'USD': 'Dólar Americano', 'EUR': 'Euro', 'GBP': 'Libra Esterlina', 'JPY': 'Iene Japonês',
+        'Franco Suíço': [], 'Real Brasileiro': [], 'Yuan Chinês': []
+    }
+    base_map = { 
+        'USD': 'Dólar Americano', 'EUR': 'Euro', 'GBP': 'Libra Esterlina', 'JPY': 'Iene Japonês',
         'AUD': 'Dólar Australiano', 'NZD': 'Dólar Neozelandês', 'CAD': 'Dólar Canadense',
-        'CHF': 'Franco Suíço', 'BRL': 'Real Brasileiro', 'CNY': 'Yuan Chinês' }
+        'CHF': 'Franco Suíço', 'BRL': 'Real Brasileiro', 'CNY': 'Yuan Chinês' 
+    }
     for item in data:
         if '/' in item['Symbol']:
             base = item['Symbol'].split('/')[0]
@@ -272,7 +259,6 @@ def carregar_noticias_frescas():
                 link = entry.link.strip()
                 if link in vistas: continue
                 titulo = entry.title.strip()
-                # Traduz apenas notícias em inglês
                 if any(x in url for x in ["zerohedge", "barchart", "investing.com/rss/news"]):
                     try:
                         titulo = GoogleTranslator(source='en', target='pt').translate(titulo)
@@ -283,105 +269,69 @@ def carregar_noticias_frescas():
                 except:
                     data = "Agora"
                 fonte = feed.feed.get('title', 'Fonte').split('-')[0].strip()
-                novas.append({'titulo': titulo, 'link': link, 'fonte': fonte, 'data': data, 'ts': time.time()})
+                novas.append({'titulo': titulo, 'link': link, 'fonte': fonte, 'data': data})
                 vistas.add(link)
-        except: continue
+        except:
+            continue
     salvar_vistas(vistas)
-    novas.sort(key=lambda x: x['ts'], reverse=True)
-    return novas[:90]  # quantidade ideal pro scroll ficar bonito
+    novas.sort(key=lambda x: x.get('ts', time.time()), reverse=True)
+    return novas[:90]
 
-# ====================== LOOP PRINCIPAL ======================
-placeholder = st.empty()
-ultima_atualizacao = 0
+# ====================== PLACEHOLDERS + LOOP ======================
+sidebar_placeholder = st.sidebar.empty()
+main_placeholder    = st.empty()
+
+ultimas_noticias = []
+proxima_atualizacao_noticias = 0
+proxima_atualizacao_cotacoes = 0
 
 while True:
     agora = time.time()
 
-    # Atualiza notícias a cada 60 segundos
-    if agora - ultima_atualizacao >= 60:
-        noticias = carregar_noticias_frescas()
-        ultima_atualizacao = agora
+    if agora >= proxima_atualizacao_noticias:
+        ultimas_noticias = carregar_noticias_frescas()
+        proxima_atualizacao_noticias = agora + 60
 
-    # Sidebar com scroll infinito
-    with st.sidebar:
-        st.markdown("<h2 style='color:#58a6ff; text-align:center; margin-bottom:0;'>Notícias ao Vivo</h2>", unsafe_allow_html=True)
-        
-        # Duplica para loop infinito
-        noticias_loop = noticias + noticias
-        
-        html = "<div class='news-container'><div class='news-list'>"
-        for i, n in enumerate(noticias_loop):
-            extra = " news-duplicate" if i >= len(noticias) else ""
-            html += f"""
-            <div class="news-item{extra}">
-                <div class="news-title"><a href="{n['link']}" target="_blank">{n['titulo']}</a></div>
-                <div class="news-meta">{n['fonte']} • {n['data']}</div>
-            </div>
-            """
-        html += "</div></div>"
-        html += "<div class='footer-text'>Atualiza automaticamente</div>"
-        
-        st.markdown(html, unsafe_allow_html=True)
+    if agora >= proxima_atualizacao_cotacoes:
+        dados_cotacoes = fetch_all()
+        proxima_atualizacao_cotacoes = agora + 55
+    # ====================== RENDERIZAÇÃO ======================
+    with sidebar_placeholder.container():
+        st.markdown("### 🔄 Atualização Automática")
+        st.write(f"**Cotação atualizada:** {datetime.now().strftime('%H:%M:%S')}")
 
-    # Conteúdo principal
-    with placeholder.container():
-        dados = fetch_all()
-        tz = timedelta(hours=-3)
-        agora_dt = datetime.now() + tz
-        
-        st.markdown(f"<h1 style='text-align:center;color:#58a6ff;'>COTAÇÕES AO VIVO</h1>", unsafe_allow_html=True)
-        st.markdown(f"<p style='text-align:center;color:#8b949e;font-size:18px;'>Atualizado: {agora_dt.strftime('%d/%m/%Y %H:%M:%S')}</p>", unsafe_allow_html=True)
-        st.markdown("---")
-
-        fig = grafico_forca(dados)
+        st.markdown("### 💱 Força das Moedas")
+        fig = grafico_forca(dados_cotacoes)
         if fig:
             st.plotly_chart(fig, use_container_width=True)
-            st.markdown("---")
 
-        # Forex
-        st.markdown("<h2 style='color:#79c0ff;'>Forex - Pares de Moedas</h2>", unsafe_allow_html=True)
-        forex_data = [x for x in dados if '/' in x['Symbol']]
-        grupos = agrupar_forex(forex_data)
-        cols = st.columns(3)
-        ordem = ['Dólar Americano', 'Euro', 'Libra Esterlina', 'Iene Japonês', 'Dólar Australiano', 
-                 'Dólar Neozelandês', 'Dólar Canadense', 'Franco Suíço', 'Real Brasileiro', 'Yuan Chinês']
-        i = 0
-        for titulo in ordem:
-            if titulo in grupos and grupos[titulo]:
-                with cols[i % 3]:
-                    df = pd.DataFrame(grupos[titulo])[ ['Symbol','Last Price','1d Change (%)'] ].set_index('Symbol')
-                    st.subheader(titulo)
-                    st.dataframe(estilizar(df), use_container_width=True)
-                i += 1
+        st.markdown("### 📊 Tabelas por Grupo")
+        st.write("Agrupamento automático baseado nas moedas base.")
+        grupos = agrupar_forex(dados_cotacoes)
 
-        st.markdown("---")
-        st.markdown("<h2 style='color:#79c0ff;'>Outros Ativos</h2>", unsafe_allow_html=True)
-        outros = [x for x in dados if '/' not in x['Symbol']]
-        cols2 = st.columns(3)
-        cats = {'USA':[], 'Mag 7':[], 'Asia/Pacifico':[], 'Europa':[], 'Commodities':[], 'Crypto':[]}
-        for item in outros:
-            for c, itens in assets.items():
-                if c == 'Forex': continue
-                if item['Symbol'] in itens.values():
-                    cats[c].append(item)
-                    break
-        i = 0
-        for cat in ['USA', 'Mag 7', 'Asia/Pacifico', 'Europa', 'Commodities', 'Crypto']:
-            if cat in cats and cats[cat]:
-                with cols2[i % 3]:
-                    df = pd.DataFrame(cats[cat])[ ['Symbol','Last Price','1d Change (%)'] ].set_index('Symbol')
-                    titulo = "Magnificent 7" if cat == "Mag 7" else cat
-                    st.subheader(titulo)
-                    st.dataframe(estilizar(df), use_container_width=True)
-                i += 1
+        for nome_grupo, itens in grupos.items():
+            st.markdown(f"#### {nome_grupo}")
+            df = pd.DataFrame(itens)
+            st.dataframe(estilizar(df), use_container_width=True)
 
-        # Download CSV
-        csv = pd.DataFrame(dados).to_csv(index=False).encode('utf-8')
-        st.download_button(
-            label="Baixar todos os dados (CSV)",
-            data=csv,
-            file_name=f"cotacoes_{agora_dt.strftime('%Y%m%d_%H%M')}.csv",
-            mime="text/csv"
-        )
+    # ====================== NOTÍCIAS ======================
+    with main_placeholder.container():
+        st.markdown("## 📰 Notícias em Tempo Real")
+        st.markdown("Fluxo contínuo das últimas notícias de mercados, economia e ativos globais.")
 
-    time.sleep(1)
+        st.markdown('<div class="news-container"><div class="news-list">', unsafe_allow_html=True)
+
+        for i, n in enumerate(ultimas_noticias):
+            dup = "news-duplicate" if i >= len(ultimas_noticias) // 2 else ""
+            st.markdown(f"""
+            <div class="news-item {dup}">
+                <div class="news-title"><a href="{n['link']}" target="_blank">{n['titulo']}</a></div>
+                <div class="news-meta">{n['fonte']} — {n['data']}</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        st.markdown("</div></div>", unsafe_allow_html=True)
+        st.markdown('<p class="footer-text">Atualiza automaticamente • Última atualização: ' +
+                    datetime.now().strftime("%H:%M:%S") + '</p>', unsafe_allow_html=True)
+
+    time.sleep(2)
