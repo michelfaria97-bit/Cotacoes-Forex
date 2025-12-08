@@ -61,7 +61,7 @@ assets = {
                'eu-stocks-50-futures': 'STOXX 50', 'spain-35-futures': 'IBEX 35', 'italy-40-futures': 'FTSE MIB', 'euro-stoxx-600': 'STOXX 600'},
     'Commodities': {'gold': 'Gold', 'silver': 'Silver', 'platinum': 'Platinum', 'copper': 'Copper',
                     'crude-oil': 'Crude Oil (WTI)', 'brent-oil': 'Brent Oil', 'natural-gas': 'Natural Gas'},
-    'Crypto': {'btc-usd': 'Bitcoin', 'eth-usd': 'Ethereum'},
+    'Crypto': {'bitcoin': 'Bitcoin', 'ethereum': 'Ethereum'},
     'Mag 7': {
         'google-inc-c': 'GOOG', 'microsoft-corp': 'MSFT', 'amazon-com-inc': 'AMZN',
         'apple-computer-inc': 'AAPL', 'facebook-inc': 'META', 'nvidia-corp': 'NVDA', 'tesla-motors': 'TSLA'
@@ -96,10 +96,10 @@ def get_single_forex(symbol, _):
 def get_single_non_forex(category, symbol, name):
     if symbol == 'usdollar':
         url = 'https://br.investing.com/indices/usdollar'
-    elif symbol == 'btc-usd':
-        url = 'https://br.investing.com/crypto/bitcoin/btc-usd'
-    elif symbol == 'eth-usd':
-        url = 'https://br.investing.com/crypto/ethereum/eth-usd'
+    elif symbol == 'bitcoin':
+        url = 'https://br.investing.com/crypto/bitcoin'
+    elif symbol == 'ethereum':
+        url = 'https://br.investing.com/crypto/ethereum'
     elif '-futures' in symbol:
         url = f'https://br.investing.com/indices/{symbol}'
     elif category == 'Commodities':
@@ -240,4 +240,5 @@ while True:
         )
 
     time.sleep(60)
+
 
