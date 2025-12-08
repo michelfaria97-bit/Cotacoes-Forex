@@ -337,7 +337,7 @@ while True:
             </style>
             """, unsafe_allow_html=True)
 
-        st.markdown("<div style='text-align:center;color:#666;font-size:12px;padding:10px 0;'>Atualiza a cada 60s</div>", unsafe_allow_html=True) unsafe_allow_html=True)
+        st.markdown("<div style='text-align:center;color:#666;font-size:12px;padding:10px 0;'>Atualiza a cada 60s</div>", unsafe_allow_html=True)
         
     # === CONTEÚDO PRINCIPAL ===
     with placeholder.container():
@@ -399,6 +399,7 @@ while True:
         )
 
     time.sleep(60)
+
 
 
 
