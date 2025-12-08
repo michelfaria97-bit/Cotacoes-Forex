@@ -286,33 +286,29 @@ while True:
     inicio = time.time()
     noticias = carregar_noticias_frescas()
 
-    # ====================== SIDEBAR — NOTÍCIAS ESTILO MARKETWATCH ======================
+# ====================== SIDEBAR — EXATAMENTE COMO MARKETWATCH ======================
     with st.sidebar:
+        # Cabeçalho único e fixo
         st.markdown("""
-        <div style="padding: 16px 16px 8px 16px; background: #0e1117; position: sticky; top: 0; z-index: 100;">
-            <h2 style="color: #58a6ff; text-align: center; margin: 0; font-size: 18px; font-weight: 600;">
-                Últimas Notícias
-            </h2>
-            <p style="color: #8b949e; text-align: center; margin: 4px 0 0 0; font-size: 13px;">
-                (Fuso horário de Brasília)
-            </p>
+        <div class="mw-header">
+            <h2 class="mw-title">Últimas Notícias</h2>
+            <p class="mw-subtitle">(Fuso horário de Brasília)</p>
         </div>
         """, unsafe_allow_html=True)
 
         if not noticias:
             st.info("Carregando notícias...")
         else:
-            news_html = ""
+            itens = ""
             for n in noticias:
-                hora = n['data'] if n['data'] != "Agora" else "Agora"
-                news_html += f"""
-                <a href="{n['link']}" target="_blank" style="text-decoration:none; color:inherit; display:block;" class="mw-news-item">
-                    <div style="padding:13px 16px; border-bottom:1px solid #30363d; transition:background .2s;">
-                        <div style="display:flex; align-items:flex-start; gap:14px;">
-                            <div style="color:#8b949e; font-size:12.5px; font-weight:500; min-width:68px; flex-shrink:0;">
-                                {hora}
+                itens += f"""
+                <a href="{n['link']}" target="_blank" style="text-decoration:none;color:inherit;display:block;" class="mw-item">
+                    <div style="padding:13px 16px;border-bottom:1px solid #30363d;">
+                        <div style="display:flex;gap:14px;align-items:flex-start;">
+                            <div style="color:#8b949e;font-size:13px;font-weight:500;min-width:70px;flex-shrink:0;">
+                                {n['hora']}
                             </div>
-                            <div style="color:#58a6ff; font-size:15px; font-weight:500; line-height:1.45;">
+                            <div style="color:#58a6ff;font-size:15px;font-weight:500;line-height:1.45;">
                                 {n['titulo']}
                             </div>
                         </div>
@@ -320,13 +316,14 @@ while True:
                 </a>
                 """
 
-            # Duplica para rolagem infinita perfeita
-            full_news = news_html + news_html
+            # Duplica para rolagem perfeita
+            itens_duplicado = itens + itens
 
             st.markdown(f"""
-            <div style="height: calc(100vh - 130px); overflow: hidden; background:#0e1117;">
-                <div style="animation: scroll 120s linear infinite; padding-top: 100vh;" onmouseover="this.style.animationPlayState='paused'" onmouseout="this.style.animationPlayState='running'">
-                    {full_news}
+            <div style="height:calc(100vh - 140px);overflow:hidden;position:relative;">
+                <div style="animation: scroll 100s linear infinite;">
+                    {itens_duplicado}
+                    <div style="height:100vh;"></div>
                 </div>
             </div>
 
@@ -335,10 +332,13 @@ while True:
                     0%   {{ transform: translateY(0); }}
                     100% {{ transform: translateY(-50%); }}
                 }}
+                .mw-item:hover {{ background:#1a1f2e !important; }}
+                a {{ display: block; }}
             </style>
             """, unsafe_allow_html=True)
 
-        st.markdown("<div style='text-align:center; color:#666; font-size:12px; padding:8px;'>Atualiza a cada 60s</div>", unsafe_allow_html=True)
+        st.markdown("<div style='text-align:center;color:#666;font-size:12px;padding:10px 0;'>Atualiza a cada 60s</div>", unsafe_allow_html=True) unsafe_allow_html=True)
+        
     # === CONTEÚDO PRINCIPAL ===
     with placeholder.container():
         dados = fetch_all()
@@ -399,6 +399,7 @@ while True:
         )
 
     time.sleep(60)
+
 
 
 
