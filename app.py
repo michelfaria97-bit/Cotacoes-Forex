@@ -94,44 +94,77 @@ def get_single_forex(symbol, _):
         return {'Symbol': symbol.upper().replace('-','/'), 'Last Price': 'Erro', '1d Change (%)': 0.0}
 
 def get_single_non_forex(category, symbol, name):
-    if symbol == 'usdollar':
-        url = 'https://br.investing.com/indices/usdollar'
-    elif symbol == 'bitcoin':
-        url = 'https://br.investing.com/crypto/bitcoin'
-    elif symbol == 'ethereum':
-        url = 'https://br.investing.com/crypto/ethereum'
-    elif '-futures' in symbol:
-        url = f'https://br.investing.com/indices/{symbol}'
-    elif category == 'Commodities':
-        url = f'https://br.investing.com/commodities/{symbol}'
-    elif category == 'Mag 7':
-        url = f'https://br.investing.com/equities/{symbol}'
+    # URLs que precisam de Selenium (Mag 7 + Crypto)
+    needs_selenium = (category == 'Mag 7') or (symbol in ['bitcoin', 'ethereum'])
+    
+    if needs_selenium:
+        return get_with_selenium(url_for_symbol(symbol, category), name)
     else:
-        url = f'https://br.investing.com/indices/{symbol}'
+        # Tudo mais continua com requests (rápido)
+        return get_with_requests(url_for_symbol(symbol, category), name)
 
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
-        'X-Requested-With': 'XMLHttpRequest'
-    }
+# Função auxiliar pra montar URL
+def url_for_symbol(symbol, category):
+    if symbol == 'usdollar':
+        return 'https://br.investing.com/indices/usdollar'
+    elif symbol == 'bitcoin':
+        return 'https://br.investing.com/crypto/bitcoin'
+    elif symbol == 'ethereum':
+        return 'https://br.investing.com/crypto/ethereum'
+    elif '-futures' in symbol:
+        return f'https://br.investing.com/indices/{symbol}'
+    elif category == 'Commodities':
+        return f'https://br.investing.com/commodities/{symbol}'
+    elif category == 'Mag 7':
+        return f'https://br.investing.com/equities/{symbol}'
+    else:
+        return f'https://br.investing.com/indices/{symbol}'
 
+# Versão com requests (rápida)
+def get_with_requests(url, name):
+    headers = {'User-Agent': 'Mozilla/5.0', 'Accept-Language': 'pt-BR'}
     try:
-        r = requests.get(url, headers=headers, timeout=20)
-        r.raise_for_status()
+        r = requests.get(url, headers=headers, timeout=15)
         soup = BeautifulSoup(r.text, 'html.parser')
-
-        # PRIMEIRA TENTATIVA: com data-test (ainda funciona em índices, forex, etc)
         price_elem = soup.find('div', {'data-test': 'instrument-price-last'})
         change_elem = soup.find('span', {'data-test': 'instrument-price-change-percent'})
+        if not price_elem: return {'Symbol': name, 'Last Price': 'N/D', '1d Change (%)': 0.0}
+        price = price_elem.text.strip()
+        change_text = change_elem.text.strip() if change_elem else '0%'
+        num = re.sub(r'[^\d.-]', '', change_text.replace(',', '.'))
+        return {'Symbol': name, 'Last Price': clean_price(price), '1d Change (%)': round(float(num or 0), 2)}
+    except:
+        return {'Symbol': name, 'Last Price': 'Erro', '1d Change (%)': 0.0}
 
-        # SEGUNDA TENTATIVA: novo padrão 2025 (ações e crypto)
-        if not price_elem:
-            price_elem = soup.find('div', class_=re.compile(r'text-5xl/9|text-[42px]'))
-        if not change_elem:
-            change_elem = soup.find('span', class_=re.compile(r'text-positive-main|text-negative-main'))
+# Versão com Selenium (só pra Mag 7 e Crypto)
+@st.cache_resource
+def get_selenium_driver():
+    from selenium import webdriver
+    options = webdriver.ChromeOptions()
+    options.add_argument('--headless')
+    options.add_argument('--no-sandbox')
+    options.add_argument('--disable-dev-shm-usage')
+    options.add_argument('--disable-blink-features=AutomationControlled')
+    driver = webdriver.Chrome(options=options)
+    driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => false})")
+    return driver
 
-        if not price_elem:
-            return {'Symbol': name, 'Last Price': 'N/D', '1d Change (%)': 0.0}
+def get_with_selenium(url, name):
+    driver = get_selenium_driver()
+    try:
+        driver.get(url)
+        WebDriverWait(driver, 20).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, '[data-test="instrument-price-last"]'))
+        )
+        price = driver.find_element(By.CSS_SELECTOR, '[data-test="instrument-price-last"]').text.strip()
+        change = driver.find_element(By.CSS_SELECTOR, '[data-test="instrument-price-change-percent"]').text.strip()
+        num = re.sub(r'[^\d.-]', '', change.replace(',', '.'))
+        return {'Symbol': name, 'Last Price': clean_price(price), '1d Change (%)': round(float(num or 0), 2)}
+    except:
+        return {'Symbol': name, 'Last Price': 'N/D', '1d Change (%)': 0.0}
+    finally:
+        # Não fecha o driver aqui → reuse entre requests (muito mais rápido)
+        pass
 
         price = price_elem.text.strip()
         
@@ -275,6 +308,7 @@ while True:
         )
 
     time.sleep(60)
+
 
 
 
