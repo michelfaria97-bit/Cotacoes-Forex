@@ -187,7 +187,7 @@ def get_with_selenium(url, name):
             '1d Change (%)': round(change_pct, 2)
         }
 
-    except Exception as e:
+        except Exception as e:
         print(f"Erro {name}: {e}")  # opcional pra debug
         return {'Symbol': name, 'Last Price': 'Erro', '1d Change (%)': 0.0}
 
@@ -308,6 +308,7 @@ while True:
         )
 
     time.sleep(60)
+
 
 
 
