@@ -296,13 +296,13 @@ while True:
 
     # === SIDEBAR: NOTÍCIAS MAIS NOVAS NO TOPO ===
     noticias = carregar_noticias_frescas()  # função sem cache para forçar atualização
-    # === SIDEBAR: NOTÍCIAS AO VIVO COM ROLAGEM ESTILO MARKETWATCH ===
+    # === SIDEBAR: NOTÍCIAS AO VIVO – ESTILO MARKETWATCH 100% FUNCIONAL ===
     with st.sidebar:
         st.markdown("""
-        <h2 style="color:#58a6ff; text-align:center; margin-bottom:10px;">
+        <h2 style="color:#58a6ff; text-align:center; margin:20px 0 8px 0; font-size:18px;">
             Notícias ao Vivo
         </h2>
-        <p style="text-align:center; color:#8b949e; font-size:13px; margin-bottom:20px;">
+        <p style="text-align:center; color:#8b949e; font-size:13px; margin-bottom:25px;">
             (Horário de Brasília)
         </p>
         """, unsafe_allow_html=True)
@@ -310,19 +310,14 @@ while True:
         if not noticias:
             st.info("Carregando notícias...")
         else:
-            # === CONTAINER COM ROLAGEM AUTOMÁTICA ===
-            news_html = """
-            <div style="height: 800px; overflow: hidden; position: relative;">
-                <div class="news-scroller">
-            """
-
-            for n in noticias[:50]:  # Mostra até 50 notícias mais recentes
-                news_html += f"""
+            news_list = ""
+            for n in noticias[:60]:  # até 60 notícias rodando – fica perfeito
+                news_list += f"""
                 <a href="{n['link']}" target="_blank" style="text-decoration:none; color:inherit; display:block;">
-                    <div style="padding:12px 16px; border-bottom:1px solid #30363d; transition:background 0.2s;">
-                        <div style="display:flex; justify-content:space-between; align-items:flex-start;">
-                            <span style="font-size:12px; color:#8b949e; min-width:65px;">{n['data']}</span>
-                            <span style="font-size:14.5px; color:#58a6ff; font-weight:500; line-height:1.4; margin-left:12px;">
+                    <div style="padding:13px 16px; border-bottom:1px solid #30363d; transition:background 0.25s;">
+                        <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px;">
+                            <span style="font-size:12px; color:#8b949e; min-width:68px; flex-shrink:0;">{n['data']}</span>
+                            <span style="font-size:14.8px; color:#58a6ff; font-weight:500; line-height:1.45;">
                                 {n['titulo']}
                             </span>
                         </div>
@@ -330,30 +325,35 @@ while True:
                 </a>
                 """
 
-            news_html += """
+            # O truque: duplicamos o bloco para o loop ficar perfeito sem “corte”
+            full_news = news_list + news_list
+
+            st.markdown(f"""
+            <div style="height: calc(100vh - 180px); overflow:hidden; border-radius:8px; background:#0e1117;">
+                <div class="auto-scroll">
+                    {full_news}
                 </div>
             </div>
 
             <style>
-                .news-scroller {
-                    animation: scroll 90s linear infinite;
-                    padding-top: 800px; /* para o loop ficar perfeito */
-                }
-                @keyframes scroll {
-                    0%   { transform: translateY(0); }
-                    100% { transform: translateY(-100%); }
-                }
-                .news-scroller:hover {
+                .auto-scroll {{
+                    animation: scrollNews 120s linear infinite;
+                }}
+                @keyframes scrollNews {{
+                    0%   {{ transform: translateY(0); }}
+                    100% {{ transform: translateY(-50%); }}
+                }}
+                .auto-scroll:hover {{
                     animation-play-state: paused;
-                }
+                }}
+                a:hover div {{
+                    background: #21262d !important;
+                }}
             </style>
-            """
+            """, unsafe_allow_html=True)
 
-            st.markdown(news_html, unsafe_allow_html=True)
-
-        # Rodapé discreto
         st.markdown("---")
-        st.caption("Atualiza automaticamente a cada 60s")
+        st.caption("Atualiza a cada 60 segundos • Rolagem automática")
 
     # === CONTEÚDO PRINCIPAL ===
     with placeholder.container():
@@ -415,6 +415,7 @@ while True:
         )
 
     time.sleep(60)
+
 
 
 
