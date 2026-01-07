@@ -12,4 +12,4 @@ jobs:
     steps:
       - name: Enviar Requisição HTTP
         run: |
-          curl -v -L https://cotacoesforex.streamlit.app/
+          curl -H "User-Agent: Mozilla/5.0" https://cotacoesforex.streamlit.app/
